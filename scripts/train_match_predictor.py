@@ -48,6 +48,7 @@ column names + license for whichever dataset you use; map labels to binary
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from pathlib import Path
@@ -289,6 +290,36 @@ def _make_loaders(tokenizer, dataset_name, positive_labels, batch_size, smoke, m
 # =============================================================================
 
 
+def _write_calibration(module, test_loader, out_dir: Path) -> None:
+    """Fit an isotonic calibration map on held-out (raw_prob, ordinal_target)
+    pairs from test_loader and write calibration.json next to model.onnx.
+    Best-effort: sklearn is a train-time-only dep, and a failure here must
+    never block the ONNX export."""
+    import torch
+
+    from src.match_predictor_calibration import fit_calibration
+
+    raw: list[float] = []
+    targets: list[float] = []
+    module.eval()
+    with torch.no_grad():
+        for batch in test_loader:
+            logits = module(batch["r_ids"], batch["r_mask"], batch["j_ids"], batch["j_mask"])
+            probs = torch.sigmoid(logits)
+            raw.extend(probs.tolist())
+            targets.extend(batch["label"].tolist())
+
+    if not raw:
+        log.warning("No held-out predictions collected; skipping calibration.json")
+        return
+
+    calib = fit_calibration(raw, targets)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "calibration.json", "w", encoding="utf-8") as f:
+        json.dump(calib, f)
+    log.info("Wrote calibration.json (%d knots) to %s", len(calib["x"]), out_dir)
+
+
 def _export_onnx(module, tokenizer, out_dir: Path, arch: str = "biencoder"):
     import torch
 
@@ -438,6 +469,11 @@ def main() -> int:
         trainer.validate(module, test_loader)
 
     out_dir = Path(args.output_dir)
+    if not args.smoke and args.arch == "biencoder":
+        try:
+            _write_calibration(module, test_loader, out_dir)
+        except Exception as e:
+            log.warning("calibration.json generation failed (export continues): %s", e)
     _export_onnx(module, tokenizer, out_dir, args.arch)
 
     # Version the exported model in W&B (model registry / portfolio). Best-effort.

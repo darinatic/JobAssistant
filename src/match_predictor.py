@@ -32,7 +32,7 @@ _ARTIFACT = "model.onnx"
 _TOKENIZER = "tokenizer.json"
 
 _lock = threading.Lock()
-_bundle: Optional[tuple] = None   # (onnx InferenceSession, Tokenizer)
+_bundle: Optional[tuple] = None   # (onnx InferenceSession, Tokenizer, calibration dict|None)
 _load_failed = False
 
 
@@ -54,6 +54,7 @@ def _artifact_dir() -> Optional[str]:
 
 
 def _load() -> Optional[tuple]:
+    import json
     import os
 
     import onnxruntime as ort
@@ -66,7 +67,12 @@ def _load() -> Optional[tuple]:
     session = ort.InferenceSession(os.path.join(d, _ARTIFACT), providers=["CPUExecutionProvider"])
     tok = Tokenizer.from_file(os.path.join(d, _TOKENIZER))
     tok.enable_truncation(max_length=MAX_LEN)
-    return session, tok
+    calib = None
+    cpath = os.path.join(d, "calibration.json")
+    if os.path.exists(cpath):
+        with open(cpath, encoding="utf-8") as f:
+            calib = json.load(f)
+    return session, tok, calib
 
 
 def _get_bundle() -> Optional[tuple]:
@@ -109,7 +115,7 @@ def predict_fit(resume_text: str, jd_text: str) -> Optional[float]:
     bundle = _get_bundle()
     if bundle is None:
         return None
-    session, tok = bundle
+    session, tok, calib = bundle
     try:
         r_ids, r_mask = _encode(tok, resume_text)
         j_ids, j_mask = _encode(tok, jd_text)
@@ -122,8 +128,10 @@ def predict_fit(resume_text: str, jd_text: str) -> Optional[float]:
                 "jd_attention_mask": j_mask,
             },
         )
+        from src.match_predictor_calibration import apply_calibration
+
         prob = float(out[0].reshape(-1)[0])
-        return max(0.0, min(1.0, prob))
+        return apply_calibration(max(0.0, min(1.0, prob)), calib)
     except Exception as e:
         log.warning("match_predictor inference failed: %s", e)
         return None
