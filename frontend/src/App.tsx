@@ -22,7 +22,7 @@ const SEARCH_KEY = 'overlap.search'
 type ActiveJob = { job?: Job; jd: string }
 
 const STYLES = [
-  { key: 'faithful' as const, hint: 'Keep everything — reorder and rephrase only. Safest.' },
+  { key: 'faithful' as const, hint: 'Keep everything, reorder and rephrase only. Safest.' },
   { key: 'balanced' as const, hint: 'Condense weak content and drop the irrelevant. Aims for one page.' },
   { key: 'aggressive' as const, hint: 'Restructure, cut low-relevance sections, hard one page. Max fit.' },
 ]
@@ -44,7 +44,7 @@ function err(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e)
   // fetch() throws a bare TypeError when it can't reach the host.
   if (/failed to fetch|networkerror|load failed|err_connection/i.test(msg))
-    return "Can't reach the server — make sure the backend is running, then try again."
+    return "Can't reach the server, make sure the backend is running, then try again."
   return msg
 }
 
@@ -59,7 +59,7 @@ function download(blob: Blob, filename: string) {
 
 function Tokens({ have = [], gap = [], missing = [], honesty = [] }: { have?: string[]; gap?: string[]; missing?: string[]; honesty?: string[] }) {
   if (!have.length && !gap.length && !missing.length && !honesty.length)
-    return <span className="text-sm text-muted-foreground">—</span>
+    return <span className="text-sm text-muted-foreground">none</span>
   return (
     <div className="flex flex-wrap gap-1.5">
       {have.map((s) => <span key={s} className="tok tok-have">{s}</span>)}
@@ -82,7 +82,7 @@ function Coverage({ have, total }: { have: number; total: number }) {
   )
 }
 
-// Relative fit within the current results — never the raw score (it's compressed
+// Relative fit within the current results, never the raw score (it's compressed
 // and misleads out of 100). `allFits` is every fit value in the batch for ranking.
 function FitBadge({ fit, allFits }: { fit?: number; allFits: number[] }) {
   if (fit == null) return null
@@ -130,7 +130,7 @@ function Home() {
   const [interpreted, setInterpreted] = useState<Record<string, any> | null>(saved.interpreted ?? null)
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
   const [searching, setSearching] = useState(false)
-  // Job keys still backfilling their description/keywords/fit — drives per-card skeletons.
+  // Job keys still backfilling their description/keywords/fit, drives per-card skeletons.
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [insights, setInsights] = useState<Insights | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -172,11 +172,11 @@ function Home() {
     return () => window.removeEventListener('keydown', h)
   }, [activeJob])
 
-  // Legitimacy red-flags — deterministic, advisory, auto-fetched whenever the drawer
+  // Legitimacy red-flags, deterministic, advisory, auto-fetched whenever the drawer
   // opens (or is patched with a fuller description once it loads).
   useEffect(() => {
     // This effect also re-fires on patchJob updates for the SAME job (new activeJob
-    // object, same identity — e.g. once the on-demand description finishes loading),
+    // object, same identity, e.g. once the on-demand description finishes loading),
     // which is fine: red flags legitimately refetch against the fuller description.
     setRedFlags(null)
     setRedFlagsFailed(false)
@@ -203,7 +203,7 @@ function Home() {
   useEffect(() => () => { searchAbort.current?.abort(); enrichAbort.current?.abort() }, [])
 
   type JobPatch = Partial<Job> & { platform: string; external_id: string }
-  // Patch one job by (platform, external_id) — updates the listing card AND the open
+  // Patch one job by (platform, external_id), updates the listing card AND the open
   // drawer if it's the same job. Re-sorts by relevance when a CV is present.
   function patchJob(u: JobPatch) {
     const same = (j: Job) => j.platform === u.platform && j.external_id === u.external_id
@@ -216,7 +216,7 @@ function Home() {
     )
   }
 
-  // Background keyword backfill — after search paints cards, fetch the descriptions
+  // Background keyword backfill, after search paints cards, fetch the descriptions
   // that came back empty (LinkedIn/JobStreet) and patch each card as it arrives.
   async function runEnrich(list: Job[]) {
     const need = list.filter((j) => !j.has_description)
@@ -230,14 +230,14 @@ function Home() {
         {
           onUpdate: (u) => {
             patchJob(u)
-            // This card is done backfilling — drop its skeleton.
+            // This card is done backfilling, drop its skeleton.
             setPending((prev) => { const n = new Set(prev); n.delete(jobKey(u)); return n })
           },
           onDone: () => {},
         },
         ac.signal,
       )
-    } catch { /* partial keywords are fine — some LinkedIn jobs stay walled */ }
+    } catch { /* partial keywords are fine, some LinkedIn jobs stay walled */ }
     // Clear any remaining skeletons (walled jobs that never returned a description).
     finally { if (enrichAbort.current === ac) { enrichAbort.current = null; setPending(new Set()) } }
   }
@@ -249,11 +249,12 @@ function Home() {
     try {
       const { markdown, chars } = await api.parseResume(file)
       updateCv(markdown)
-      toast.success(`Resume loaded (${chars.toLocaleString()} chars) — review the markdown for parsing glitches`)
+      toast.success(`Resume loaded (${chars.toLocaleString()} chars), review the markdown for parsing glitches`)
     } catch (e) { toast.error(err(e)) } finally { setUploading(false) }
   }
 
   async function onSearch() {
+    if (!cv) return toast.error('Upload your resume first, then search.')
     if (query.trim().length < 2) return
     searchAbort.current?.abort()          // supersede any in-flight search
     enrichAbort.current?.abort()          // and its background keyword backfill
@@ -280,23 +281,27 @@ function Home() {
         },
         ac.signal,
       )
-      if (collected.length === 0) toast.info('No jobs found — try a broader query.')
+      if (collected.length === 0) toast.info('No jobs found, try a broader query.')
     } catch (e) {
-      if (ac.signal.aborted) return       // cancelled/superseded — stay quiet
+      if (ac.signal.aborted) return       // cancelled/superseded, stay quiet
       // Keep whatever streamed in before the drop; just tell the user.
-      if (collected.length > 0) toast.warning(`Connection dropped — showing the ${collected.length} jobs found so far.`)
+      if (collected.length > 0) toast.warning(`Connection dropped, showing the ${collected.length} jobs found so far.`)
       else toast.error(err(e))
     } finally {
       if (searchAbort.current === ac) { searchAbort.current = null; setSearching(false) }
     }
-    // Search done — backfill the missing keywords in the background (not awaited).
-    if (!ac.signal.aborted) runEnrich(collected)
+    // Search done, surface insights at the top and backfill keywords (both unawaited).
+    if (!ac.signal.aborted) { onAnalyze(collected); runEnrich(collected) }
   }
 
-  async function onAnalyze() {
+  // Deterministic, no-LLM aggregation over the found jobs. Auto-run after a search
+  // completes (pass the freshly-collected list to avoid stale state); shown at the top.
+  async function onAnalyze(jobsArg?: Job[]) {
+    const js = jobsArg ?? jobs
+    if (!js.length) return
     setAnalyzing(true)
-    try { setInsights(await api.insights({ jobs, resume_markdown: cv || undefined })) }
-    catch (e) { toast.error(err(e)) } finally { setAnalyzing(false) }
+    try { setInsights(await api.insights({ jobs: js, resume_markdown: cv || undefined })) }
+    catch { /* insights are best-effort; a failure shouldn't disrupt the search */ } finally { setAnalyzing(false) }
   }
 
   async function openJob(job: Job) {
@@ -320,13 +325,13 @@ function Home() {
             relevance: d.relevance, ...(d.fit != null ? { fit: d.fit } : {}),
           })
         }
-      } catch { /* leave description empty — the drawer shows the no-description affordance */ }
+      } catch { /* leave description empty, the drawer shows the no-description affordance */ }
       finally { setDescLoading(false); setPending((prev) => { const n = new Set(prev); n.delete(jobKey(job)); return n }) }
     }
   }
 
-  // Open the tailoring workspace for a pasted JD WITHOUT auto-running the tailor —
-  // the drawer shows the style picker so the user chooses faithful/balanced/aggressive
+  // Open the tailoring workspace for a pasted JD WITHOUT auto-running the tailor.
+  // The drawer shows the style picker so the user chooses faithful/balanced/aggressive
   // before tailoring (same as the search-job flow), instead of silently defaulting.
   function openPasteJd() {
     if (!cv) return toast.error('Upload your resume first.')
@@ -379,13 +384,13 @@ function Home() {
     try {
       const { jd_text } = await api.extractJd({ url })
       setJd(jd_text)
-      toast.success('Job description extracted — review it, then Tailor.')
+      toast.success('Job description extracted, review it, then Tailor.')
     } catch (e) { toast.error(err(e)) } finally { setFetchingUrl(false) }
   }
 
   const m = result?.match
   const j = activeJob?.job
-  // All predicted-fit values in the current results — the batch context that makes
+  // All predicted-fit values in the current results, the batch context that makes
   // each job's fit relative (Strong/Moderate/Weak + top-fit) rather than an absolute %.
   const allFits = jobs.map((job) => job.fit).filter((f): f is number => f != null)
 
@@ -406,16 +411,12 @@ function Home() {
         <section className="pt-12 pb-9">
           <p className="eyebrow mb-3">Deterministic · ATS-keyword matching</p>
           <h1 className="display text-[2rem] sm:text-[2.6rem] font-semibold leading-[1.06] max-w-2xl">
-            See where your CV and the job <span className="text-primary">overlap</span> — then tailor to it.
+            See where your CV and the job <span className="text-primary">overlap</span>, then tailor to it.
           </h1>
-          <p className="mt-4 max-w-xl leading-relaxed text-muted-foreground">
-            An ATS-safe resume tuned to exactly what the posting asks for. The matcher only surfaces skills
-            already in your CV — keyword-exact, never fabricated. No sign-up; it all stays in your browser.
-          </p>
         </section>
 
         <div className="space-y-5">
-          {/* Step 1 — resume */}
+          {/* Step 1, resume */}
           <section className="rounded-xl border bg-card p-5 sm:p-6">
             <StepHead n="01" title="Your resume" hint={cv ? 'loaded' : undefined} />
             <div className="flex items-center gap-3 flex-wrap">
@@ -439,15 +440,15 @@ function Home() {
               <div className="mt-4 space-y-1.5">
                 <ResumeWorkspace value={cv} onChange={updateCv} showPageBadge label="your resume" />
                 <p className="text-xs text-muted-foreground">
-                  Fix any PDF-parsing glitches here — this is the exact CV used for matching and tailoring. Saved to your browser as you type.
+                  Fix any PDF-parsing glitches here, this is the exact CV used for matching and tailoring. Saved to your browser as you type.
                 </p>
               </div>
             )}
           </section>
 
-          {/* Step 2 — find a job */}
+          {/* Step 2, find a job */}
           <section className="rounded-xl border bg-card p-5 sm:p-6">
-            <StepHead n="02" title="Find a job — or paste one" />
+            <StepHead n="02" title="Find a job, or paste one" />
             <Tabs defaultValue="search">
               <TabsList>
                 <TabsTrigger value="search">Search jobs</TabsTrigger>
@@ -459,13 +460,17 @@ function Home() {
                   <Input value={query} onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && onSearch()}
                     placeholder={'e.g. "50 remote AI Engineer jobs on JobStreet, this week"'} />
-                  <Button onClick={onSearch} disabled={searching}>{searching ? 'Searching…' : 'Search'}</Button>
+                  <Button onClick={onSearch} disabled={searching || !cv}>{searching ? 'Searching…' : 'Search'}</Button>
                 </div>
-                <p className="eyebrow">
-                  searches <span style={{ color: 'var(--loc)' }}>MyCareersFuture</span> ·{' '}
-                  <span style={{ color: 'var(--loc)' }}>LinkedIn</span> ·{' '}
-                  <span style={{ color: 'var(--loc)' }}>JobStreet</span> in parallel — or name one in your query
-                </p>
+                {!cv ? (
+                  <p className="text-xs text-muted-foreground">Upload your resume above to search, so each job can be ranked against it.</p>
+                ) : (
+                  <p className="eyebrow">
+                    searches <span style={{ color: 'var(--loc)' }}>MyCareersFuture</span> ·{' '}
+                    <span style={{ color: 'var(--loc)' }}>LinkedIn</span> ·{' '}
+                    <span style={{ color: 'var(--loc)' }}>JobStreet</span> in parallel, or name one in your query
+                  </p>
+                )}
 
                 {interpreted && (
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -484,7 +489,7 @@ function Home() {
 
                 {searching && (
                   <p className="font-mono text-xs text-muted-foreground animate-pulse">
-                    ▸ scraping MyCareersFuture · LinkedIn · JobStreet — {jobs.length} found so far…
+                    ▸ scraping MyCareersFuture · LinkedIn · JobStreet, {jobs.length} found so far…
                   </p>
                 )}
                 {!searching && pending.size > 0 && (
@@ -492,6 +497,37 @@ function Home() {
                     ▸ loading keywords for {pending.size} more {pending.size === 1 ? 'job' : 'jobs'}…
                   </p>
                 )}
+
+                {insights ? (
+                  <div className="rounded-lg border bg-card p-5 space-y-5">
+                    <p className="eyebrow">insights on these {insights.job_count} jobs</p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-1.5 font-mono text-xs">
+                      <span><span className="text-muted-foreground">jobs </span>{insights.job_count}</span>
+                      {insights.coverage && (
+                        <>
+                          <span><span className="text-muted-foreground">avg match </span><b className={scoreColor(insights.coverage.avg_relevance)}>{insights.coverage.avg_relevance}%</b></span>
+                          <span><span className="text-muted-foreground">strong ≥60% </span>{insights.coverage.strong_matches}</span>
+                        </>
+                      )}
+                      {insights.salary?.max && <span><span className="text-muted-foreground">salary to </span>{insights.salary.max.toLocaleString()}</span>}
+                    </div>
+                    <div className="space-y-2">
+                      <p className="eyebrow">most in-demand skills</p>
+                      {insights.demanded_skills.slice(0, 10).map((d) => (
+                        <div key={d.skill} className="flex items-center gap-3">
+                          <span className="w-36 shrink-0 truncate font-mono text-xs">{d.skill}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${d.pct}%`, background: d.candidate_has ? 'var(--have)' : 'var(--gap)' }} />
+                          </div>
+                          <span className="w-9 text-right font-mono text-xs tabular-nums text-muted-foreground">{d.pct}%</span>
+                          <span className={`tok w-12 text-center shrink-0 ${d.candidate_has ? 'tok-have' : 'tok-gap'}`}>{d.candidate_has ? 'you' : 'gap'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : analyzing ? (
+                  <p className="eyebrow animate-pulse">▸ analyzing insights…</p>
+                ) : null}
 
                 <div className="space-y-2">
                   {jobs.map((job) => {
@@ -533,40 +569,6 @@ function Home() {
                   })}
                 </div>
 
-                {jobs.length > 0 && !searching && (
-                  <div className="space-y-4 pt-1">
-                    <Button size="sm" variant="secondary" onClick={onAnalyze} disabled={analyzing}>
-                      {analyzing ? 'Analyzing…' : `Insights on these ${jobs.length} jobs`}
-                    </Button>
-                    {insights && (
-                      <div className="rounded-lg border bg-card p-5 space-y-5">
-                        <div className="flex flex-wrap gap-x-6 gap-y-1.5 font-mono text-xs">
-                          <span><span className="text-muted-foreground">jobs </span>{insights.job_count}</span>
-                          {insights.coverage && (
-                            <>
-                              <span><span className="text-muted-foreground">avg match </span><b className={scoreColor(insights.coverage.avg_relevance)}>{insights.coverage.avg_relevance}%</b></span>
-                              <span><span className="text-muted-foreground">strong ≥60% </span>{insights.coverage.strong_matches}</span>
-                            </>
-                          )}
-                          {insights.salary?.max && <span><span className="text-muted-foreground">salary to </span>{insights.salary.max.toLocaleString()}</span>}
-                        </div>
-                        <div className="space-y-2">
-                          <p className="eyebrow">most in-demand skills</p>
-                          {insights.demanded_skills.slice(0, 10).map((d) => (
-                            <div key={d.skill} className="flex items-center gap-3">
-                              <span className="w-36 shrink-0 truncate font-mono text-xs">{d.skill}</span>
-                              <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${d.pct}%`, background: d.candidate_has ? 'var(--have)' : 'var(--gap)' }} />
-                              </div>
-                              <span className="w-9 text-right font-mono text-xs tabular-nums text-muted-foreground">{d.pct}%</span>
-                              <span className={`tok w-12 text-center shrink-0 ${d.candidate_has ? 'tok-have' : 'tok-gap'}`}>{d.candidate_has ? 'you' : 'gap'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </TabsContent>
 
               <TabsContent value="paste" className="space-y-3 pt-4">
@@ -582,7 +584,7 @@ function Home() {
         </div>
 
         <footer className="mt-16 eyebrow">
-          Overlap — stateless · deterministic matcher · your CV never leaves the browser
+          Overlap, stateless · deterministic matcher · your CV never leaves the browser
         </footer>
       </main>
 
@@ -621,7 +623,7 @@ function Home() {
                     </div>
                   </div>
                   <Tokens have={j.matched_skills ?? []} missing={j.missing_skills ?? []} />
-                  <p className="text-xs text-muted-foreground">Green = already in your CV. Tailor to weave these in — the greyed ones are never fabricated.</p>
+                  <p className="text-xs text-muted-foreground">Green = already in your CV. Tailor to weave these in, the greyed ones are never fabricated.</p>
                 </div>
               ) : null}
 
@@ -633,7 +635,7 @@ function Home() {
                   {redFlags === null ? (
                     <p className="font-mono text-xs text-muted-foreground animate-pulse">▸ scanning…</p>
                   ) : redFlagsFailed ? (
-                    <p className="text-sm text-muted-foreground">Couldn't run the check — try again later.</p>
+                    <p className="text-sm text-muted-foreground">Couldn't run the check, try again later.</p>
                   ) : redFlags.length === 0 ? (
                     <p className="text-sm" style={{ color: 'var(--have)' }}>No red flags detected.</p>
                   ) : (
@@ -644,14 +646,14 @@ function Home() {
                             {f.severity}
                           </span>
                           <span>
-                            <b>{f.label}</b>{f.evidence ? ` — "${f.evidence}"` : ''}
+                            <b>{f.label}</b>{f.evidence ? `, "${f.evidence}"` : ''}
                             <span className="text-muted-foreground text-xs"> · {f.source}</span>
                           </span>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <p className="text-xs text-muted-foreground">Advisory heuristics — never blocks. Verify anything flagged yourself.</p>
+                  <p className="text-xs text-muted-foreground">Advisory heuristics, never blocks. Verify anything flagged yourself.</p>
                 </div>
               </div>
 
@@ -673,7 +675,7 @@ function Home() {
                   {tailoring ? 'Tailoring…' : descLoading ? 'Loading job…' : result ? 'Re-tailor' : 'Tailor my resume'}
                 </Button>
                 {tailoring && <p className="font-mono text-xs text-muted-foreground animate-pulse">▸ {stage}</p>}
-                <p className="text-xs text-muted-foreground">Every style keeps you honest — no skill, title, or metric that isn’t in your CV.</p>
+                <p className="text-xs text-muted-foreground">Every style keeps you honest, no skill, title, or metric that isn’t in your CV.</p>
               </div>
 
               {/* Result */}
@@ -690,31 +692,31 @@ function Home() {
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div><p className="eyebrow mb-2">keywords you have ({m.keyword_have.length})</p><Tokens have={m.keyword_have} /></div>
-                    <div><p className="eyebrow mb-2">wanted — not in your CV ({m.keyword_missing.length})</p><Tokens gap={m.keyword_missing} /></div>
+                    <div><p className="eyebrow mb-2">wanted, not in your CV ({m.keyword_missing.length})</p><Tokens gap={m.keyword_missing} /></div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Only skills already in your CV are surfaced — the missing ones are never added to your resume.</p>
+                  <p className="text-xs text-muted-foreground">Only skills already in your CV are surfaced, the missing ones are never added to your resume.</p>
 
                   {/* Deterministic honesty check (guard against an absent field) */}
                   {(result.honesty ?? []).length === 0 ? (
                     <p className="flex items-center gap-2 text-xs" style={{ color: 'var(--have)' }}>
-                      <span aria-hidden>✓</span> Honesty check passed — no invented roles, projects, metrics, or industries.
+                      <span aria-hidden>✓</span> Honesty check passed, no invented roles, projects, metrics, or industries.
                     </p>
                   ) : (
                     <div className="rounded-lg border p-3 space-y-1.5"
                       style={{ borderColor: 'color-mix(in oklab, var(--honesty) 40%, transparent)', background: 'color-mix(in oklab, var(--honesty) 8%, transparent)' }}>
-                      <p className="eyebrow" style={{ color: 'var(--honesty)' }}>honesty check — {(result.honesty ?? []).length} to verify</p>
+                      <p className="eyebrow" style={{ color: 'var(--honesty)' }}>honesty check, {(result.honesty ?? []).length} to verify</p>
                       {(result.honesty ?? []).map((h, i) => (
                         <p key={i} className="text-xs text-muted-foreground">
                           <span className="tok mr-1" style={{ color: 'var(--honesty)' }}>{h.kind}</span>{h.detail}
                         </p>
                       ))}
-                      <p className="text-[11px] text-muted-foreground pt-0.5">Review these in the editable resume below — remove anything you can’t back up.</p>
+                      <p className="text-[11px] text-muted-foreground pt-0.5">Review these in the editable resume below, remove anything you can’t back up.</p>
                     </div>
                   )}
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <p className="eyebrow">tailored resume — edit before download</p>
+                      <p className="eyebrow">tailored resume, edit before download</p>
                       <div className="flex items-center gap-2">
                         {estimatePageTarget(editedResume).underUsedTrailingPage && (
                           <Button size="sm" variant="secondary" onClick={onFitToPage} disabled={fitting || tailoring}>
@@ -752,7 +754,7 @@ function Home() {
               <details className="rounded-lg border bg-muted/20">
                 <summary className="cursor-pointer px-4 py-2.5 eyebrow">full job description</summary>
                 <p className="px-4 pb-4 pt-1 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground max-h-96 overflow-y-auto">
-                  {descLoading ? 'Fetching…' : activeJob.jd || 'No description available — try “View original ↗”.'}
+                  {descLoading ? 'Fetching…' : activeJob.jd || 'No description available, try “View original ↗”.'}
                 </p>
               </details>
             </div>
@@ -763,7 +765,7 @@ function Home() {
   )
 }
 
-// Stops any render error from blanking the whole page — shows a reload prompt
+// Stops any render error from blanking the whole page, shows a reload prompt
 // instead. Your CV/results stay safe in localStorage across the reload.
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null }

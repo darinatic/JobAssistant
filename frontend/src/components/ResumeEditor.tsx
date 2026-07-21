@@ -68,7 +68,7 @@ export function ResumeEditor({ value, onChange, showPageBadge = false }: {
           {showPageBadge && <PageFit md={value} />}
         </div>
         <ResumePreview md={value} />
-        <p className="px-1 pt-1 text-[10px] text-muted-foreground">Approximate — download the PDF for the exact layout.</p>
+        <p className="px-1 pt-1 text-[10px] text-muted-foreground">Approximate, download the PDF for the exact layout.</p>
       </div>
     </div>
   )
