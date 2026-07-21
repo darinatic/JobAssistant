@@ -167,7 +167,10 @@ def _build_cross_module(base_model: str, lr: float, lora_r: int, pos_weight: flo
             lora = LoraConfig(r=lora_r, lora_alpha=2 * lora_r, lora_dropout=0.1, target_modules=["query", "value"])
             self.encoder = get_peft_model(encoder, lora)
             self.head = nn.Linear(encoder.config.hidden_size, 1)
-            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+            # Soft-label regression: targets are ordinal magnitudes {0, 0.5, 1}, so
+            # BCE (which accepts soft targets) makes sigmoid(logit) approximate the
+            # fit magnitude directly. No pos_weight — Potential Fit is no longer a rare positive.
+            self.loss_fn = nn.BCEWithLogitsLoss()
             self._val: list[tuple[float, float]] = []
 
         def forward(self, input_ids, attention_mask, token_type_ids):
@@ -189,16 +192,23 @@ def _build_cross_module(base_model: str, lr: float, lora_r: int, pos_weight: flo
                 self._val.append((p, y))
 
         def on_validation_epoch_end(self):
-            from sklearn.metrics import f1_score, roc_auc_score
+            from sklearn.metrics import roc_auc_score
 
-            if self._val:
-                probs, ys = zip(*self._val)
-                try:
-                    self.log("val_auc", float(roc_auc_score(ys, probs)), prog_bar=True)
-                    self.log("val_f1", float(f1_score(ys, [p >= 0.5 for p in probs])), prog_bar=True)
-                except ValueError:
-                    pass
-                self._val.clear()
+            if not self._val:
+                return
+            probs, ys = zip(*self._val)  # ys are the soft targets 0/0.5/1.0
+            mae = sum(abs(p - y) for p, y in self._val) / len(self._val)
+            self.log("val_mae", float(mae), prog_bar=True)
+            # per-tier mean prediction (drives the "Good ~0.8" success criterion)
+            for tier, tv in (("no", 0.0), ("pot", 0.5), ("good", 1.0)):
+                ps = [p for p, y in self._val if abs(y - tv) < 1e-6]
+                if ps:
+                    self.log(f"val_mean_{tier}", float(sum(ps) / len(ps)), prog_bar=False)
+            # ranking quality: Good (target 1.0) vs the rest
+            bin_y = [1 if abs(y - 1.0) < 1e-6 else 0 for y in ys]
+            if 0 < sum(bin_y) < len(bin_y):
+                self.log("val_auc", float(roc_auc_score(bin_y, probs)), prog_bar=True)
+            self._val.clear()
 
         def configure_optimizers(self):
             params = [p for p in self.parameters() if p.requires_grad]
@@ -226,11 +236,8 @@ def _make_loaders(tokenizer, dataset_name, positive_labels, batch_size, smoke, m
         def __getitem__(self, i):
             return self.rows[i]
 
-    def _label(v) -> float:
-        return 1.0 if str(v).strip().lower() in positive_labels else 0.0
-
-    # Bi-encoder trains on ordinal soft labels (0/0.5/1); crossencoder keeps the
-    # legacy binary `_label` (reads `positive_labels`) for backward compat.
+    # Both architectures train on the same ordinal soft labels (0/0.5/1) —
+    # "Potential Fit" is a genuine middle, not a negative.
     _bi_label = _ordinal_label
 
     def _tok(text):
@@ -256,7 +263,7 @@ def _make_loaders(tokenizer, dataset_name, positive_labels, batch_size, smoke, m
                 "input_ids": torch.tensor(enc["input_ids"]),
                 "attention_mask": torch.tensor(enc["attention_mask"]),
                 "token_type_ids": torch.tensor(tt),
-                "label": torch.tensor(_label(r[label_col])),
+                "label": torch.tensor(_ordinal_label(r[label_col])),
             })
         return rows
 
@@ -290,7 +297,7 @@ def _make_loaders(tokenizer, dataset_name, positive_labels, batch_size, smoke, m
 # =============================================================================
 
 
-def _write_calibration(module, test_loader, out_dir: Path) -> None:
+def _write_calibration(module, test_loader, out_dir: Path, arch: str = "biencoder") -> None:
     """Fit an isotonic calibration map on held-out (raw_prob, ordinal_target)
     pairs from test_loader and write calibration.json next to model.onnx.
     Best-effort: sklearn is a train-time-only dep, and a failure here must
@@ -304,7 +311,10 @@ def _write_calibration(module, test_loader, out_dir: Path) -> None:
     module.eval()
     with torch.no_grad():
         for batch in test_loader:
-            logits = module(batch["r_ids"], batch["r_mask"], batch["j_ids"], batch["j_mask"])
+            if arch == "crossencoder":
+                logits = module(batch["input_ids"], batch["attention_mask"], batch["token_type_ids"])
+            else:
+                logits = module(batch["r_ids"], batch["r_mask"], batch["j_ids"], batch["j_mask"])
             probs = torch.sigmoid(logits)
             raw.extend(probs.tolist())
             targets.extend(batch["label"].tolist())
@@ -469,9 +479,9 @@ def main() -> int:
         trainer.validate(module, test_loader)
 
     out_dir = Path(args.output_dir)
-    if not args.smoke and args.arch == "biencoder":
+    if not args.smoke:
         try:
-            _write_calibration(module, test_loader, out_dir)
+            _write_calibration(module, test_loader, out_dir, args.arch)
         except Exception as e:
             log.warning("calibration.json generation failed (export continues): %s", e)
     _export_onnx(module, tokenizer, out_dir, args.arch)
