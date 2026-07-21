@@ -62,6 +62,15 @@ DEFAULT_DATASET = "cnamuangtoun/resume-job-description-fit"
 POS_WEIGHT = 3.0
 LORA_R = 8
 
+# Ordinal fit targets: the dataset's three classes mapped to a magnitude in [0,1]
+# (Potential Fit is a genuine middle, not a negative). Soft-label regression on
+# these replaces the old binary "Good Fit=1, else 0" which capped outputs at ~0.6.
+_ORDINAL = {"no fit": 0.0, "potential fit": 0.5, "good fit": 1.0}
+
+
+def _ordinal_label(v) -> float:
+    return _ORDINAL.get(str(v).strip().lower(), 0.0)
+
 
 # =============================================================================
 # Model
@@ -88,7 +97,10 @@ def _build_module(base_model: str, lr: float, lora_r: int, pos_weight: float):
             self.encoder = get_peft_model(encoder, lora)
             hidden = encoder.config.hidden_size
             self.head = nn.Linear(3 * hidden, 1)
-            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+            # Soft-label regression: targets are ordinal magnitudes {0, 0.5, 1}, so
+            # BCE (which accepts soft targets) makes sigmoid(logit) approximate the
+            # fit magnitude directly. No pos_weight — Potential Fit is no longer a rare positive.
+            self.loss_fn = nn.BCEWithLogitsLoss()
             self._val: list[tuple[float, float]] = []
 
         def encode(self, ids, mask):
@@ -113,16 +125,23 @@ def _build_module(base_model: str, lr: float, lora_r: int, pos_weight: float):
                 self._val.append((p, y))
 
         def on_validation_epoch_end(self):
-            from sklearn.metrics import f1_score, roc_auc_score
+            from sklearn.metrics import roc_auc_score
 
-            if self._val:
-                probs, ys = zip(*self._val)
-                try:
-                    self.log("val_auc", float(roc_auc_score(ys, probs)), prog_bar=True)
-                    self.log("val_f1", float(f1_score(ys, [p >= 0.5 for p in probs])), prog_bar=True)
-                except ValueError:
-                    pass  # single-class batch
-                self._val.clear()
+            if not self._val:
+                return
+            probs, ys = zip(*self._val)  # ys are the soft targets 0/0.5/1.0
+            mae = sum(abs(p - y) for p, y in self._val) / len(self._val)
+            self.log("val_mae", float(mae), prog_bar=True)
+            # per-tier mean prediction (drives the "Good ~0.8" success criterion)
+            for tier, tv in (("no", 0.0), ("pot", 0.5), ("good", 1.0)):
+                ps = [p for p, y in self._val if abs(y - tv) < 1e-6]
+                if ps:
+                    self.log(f"val_mean_{tier}", float(sum(ps) / len(ps)), prog_bar=False)
+            # ranking quality: Good (target 1.0) vs the rest
+            bin_y = [1 if abs(y - 1.0) < 1e-6 else 0 for y in ys]
+            if 0 < sum(bin_y) < len(bin_y):
+                self.log("val_auc", float(roc_auc_score(bin_y, probs)), prog_bar=True)
+            self._val.clear()
 
         def configure_optimizers(self):
             params = [p for p in self.parameters() if p.requires_grad]
@@ -209,6 +228,10 @@ def _make_loaders(tokenizer, dataset_name, positive_labels, batch_size, smoke, m
     def _label(v) -> float:
         return 1.0 if str(v).strip().lower() in positive_labels else 0.0
 
+    # Bi-encoder trains on ordinal soft labels (0/0.5/1); crossencoder keeps the
+    # legacy binary `_label` (reads `positive_labels`) for backward compat.
+    _bi_label = _ordinal_label
+
     def _tok(text):
         enc = tokenizer(text or "", truncation=True, max_length=max_len, padding="max_length")
         return torch.tensor(enc["input_ids"]), torch.tensor(enc["attention_mask"])
@@ -219,7 +242,7 @@ def _make_loaders(tokenizer, dataset_name, positive_labels, batch_size, smoke, m
             r_ids, r_mask = _tok(r[resume_col])
             j_ids, j_mask = _tok(r[jd_col])
             rows.append({"r_ids": r_ids, "r_mask": r_mask, "j_ids": j_ids, "j_mask": j_mask,
-                         "label": torch.tensor(_label(r[label_col]))})
+                         "label": torch.tensor(_bi_label(r[label_col]))})
         return rows
 
     def _to_rows_cross(records, resume_col, jd_col, label_col):
