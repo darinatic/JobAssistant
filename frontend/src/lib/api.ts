@@ -80,6 +80,16 @@ export interface Job {
   salary_max?: number | null
 }
 
+export interface SearchFilters {
+  keyword?: string
+  location?: string
+  date_posted?: string
+  experience_levels?: string[]
+  remote_options?: string[]
+  platforms?: string[]
+  max_jobs?: number
+}
+
 export interface Insights {
   job_count: number
   demanded_skills: { skill: string; count: number; pct: number; candidate_has: boolean }[]
@@ -118,12 +128,12 @@ export const api = {
     return handle(await fetch(`${API_URL}/resume/parse`, { method: 'POST', body: fd }))
   },
 
-  search: (body: { query: string; resume_markdown?: string }) =>
+  search: (body: { query: string; filters?: SearchFilters; resume_markdown?: string }) =>
     postJson<{ jobs: Job[]; interpreted: Record<string, unknown> }>('/search', body),
 
   // Progressive search — NDJSON stream. Calls handlers as results arrive.
   searchStream: async (
-    body: { query: string; resume_markdown?: string },
+    body: { query: string; filters?: SearchFilters; resume_markdown?: string },
     h: { onInterpreted: (d: Record<string, any>) => void; onJob: (j: Job) => void; onDone: () => void },
     signal?: AbortSignal,
   ): Promise<void> => {

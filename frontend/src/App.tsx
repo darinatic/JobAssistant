@@ -11,6 +11,7 @@ import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
+import { DEFAULT_FILTERS, filtersFromInterpreted, toRequestFilters, type FilterState } from '@/lib/search-filters'
 
 // Stable per-job key for the pending/enrichment set.
 const jobKey = (j: { platform: string; external_id: string }) => `${j.platform}:${j.external_id}`
@@ -30,7 +31,7 @@ const STYLES = [
   { key: 'balanced' as const, hint: 'Condense weak content and drop the irrelevant. Aims for one page.' },
   { key: 'aggressive' as const, hint: 'Restructure, cut low-relevance sections, hard one page. Max fit.' },
 ]
-type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[] }
+type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[]; filters?: FilterState }
 
 function loadSearch(): SavedSearch {
   try { return JSON.parse(localStorage.getItem(SEARCH_KEY) || '{}') } catch { return {} }
@@ -133,6 +134,9 @@ function Home() {
   const [query, setQuery] = useState(saved.query ?? 'AI Engineer jobs in Singapore')
   const [interpreted, setInterpreted] = useState<Record<string, any> | null>(saved.interpreted ?? null)
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
+  const [filters, setFilters] = useState<FilterState>(saved.filters ?? DEFAULT_FILTERS)
+  // NL box edited -> next search is an AI parse; a dropdown touched -> deterministic (no-LLM) search.
+  const [manualFilters, setManualFilters] = useState(false)
   const [searching, setSearching] = useState(false)
   // Job keys still backfilling their description/keywords/fit, drives per-card skeletons.
   const [pending, setPending] = useState<Set<string>>(() => new Set())
@@ -200,8 +204,8 @@ function Home() {
   // losing everything. Skip writing while a search is streaming in.
   useEffect(() => {
     if (searching) return
-    try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs })) } catch { /* quota */ }
-  }, [query, interpreted, jobs, searching])
+    try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs, filters })) } catch { /* quota */ }
+  }, [query, interpreted, jobs, filters, searching])
 
   // Abort any in-flight streams when the page unmounts (refresh/navigate).
   useEffect(() => () => { searchAbort.current?.abort(); enrichAbort.current?.abort() }, [])
@@ -268,9 +272,13 @@ function Home() {
     const collected: Job[] = []
     try {
       await api.searchStream(
-        { query, resume_markdown: cv || undefined },
         {
-          onInterpreted: (d) => setInterpreted(d),
+          query,
+          resume_markdown: cv || undefined,
+          filters: manualFilters ? toRequestFilters(filters, query, interpreted?.location ?? 'Singapore') : undefined,
+        },
+        {
+          onInterpreted: (d) => { setInterpreted(d); setFilters(filtersFromInterpreted(d)); setManualFilters(false) },
           onJob: (j) => {
             // A platform can return the same posting twice; skip duplicates so the
             // list keys stay unique and a job isn't double-counted.
@@ -465,7 +473,7 @@ function Home() {
 
               <TabsContent value="search" className="space-y-4 pt-4">
                 <div className="flex gap-2">
-                  <Input value={query} onChange={(e) => setQuery(e.target.value)}
+                  <Input value={query} onChange={(e) => { setQuery(e.target.value); setManualFilters(false) }}
                     onKeyDown={(e) => e.key === 'Enter' && onSearch()}
                     placeholder={'e.g. "50 remote AI Engineer jobs on JobStreet, this week"'} />
                   <Button onClick={onSearch} disabled={searching || !cv}>{searching ? 'Searching…' : 'Search'}</Button>
