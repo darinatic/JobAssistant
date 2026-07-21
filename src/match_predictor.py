@@ -1,19 +1,29 @@
 """Shared resume↔JD fit predictor — inference (Phase 10).
 
-A bi-encoder (SBERT + LoRA) fine-tuned on public resume-JD fit data and exported
-to ONNX. Served here with ONNX Runtime — **no PyTorch in production** (only
-`onnxruntime` + `tokenizers`, the `[predictor]` extra).
+A resume↔JD fit model (SBERT + LoRA) fine-tuned on public resume-JD fit data and
+exported to ONNX. Served here with ONNX Runtime — **no PyTorch in production**
+(only `onnxruntime` + `tokenizers`, the `[predictor]` extra).
 
 Flag-gated by `MATCH_PREDICTOR_MODEL` (`none` | `v1`). When off, or if the
 artifact can't be loaded, `predict_fit()` returns None and the app behaves
 exactly as before — so this ships dark and lights up only once a model is
 trained (Stage B) and the flag is flipped.
 
-ONNX contract (the training-side export in scripts/train_match_predictor.py
-MUST match this — it is the source of truth):
-    inputs : resume_input_ids, resume_attention_mask,
-             jd_input_ids,     jd_attention_mask          (all int64, shape [1, seq])
-    output : fit_prob                                     (float, shape [1] or [1,1]) in [0,1]
+Two ONNX contracts are supported (the training-side export in
+scripts/train_match_predictor.py MUST match one of these — it is the source
+of truth). The contract in use is detected at load time from the session's
+input names, so either artifact can be dropped in without a code change:
+
+    bi-encoder (resume + JD encoded separately):
+        inputs : resume_input_ids, resume_attention_mask,
+                 jd_input_ids,     jd_attention_mask          (int64, shape [1, seq])
+        output : fit_prob                                     (float, shape [1]/[1,1]) in [0,1]
+
+    cross-encoder (resume + JD encoded together as a pair,
+                   "[CLS] resume [SEP] jd [SEP]"):
+        inputs : input_ids, attention_mask, token_type_ids     (int64, shape [1, seq])
+        output : fit_prob                                      (float, shape [1]/[1,1]) in [0,1]
+
 A `tokenizer.json` (HF fast tokenizer) ships alongside `model.onnx`.
 """
 
@@ -32,7 +42,7 @@ _ARTIFACT = "model.onnx"
 _TOKENIZER = "tokenizer.json"
 
 _lock = threading.Lock()
-_bundle: Optional[tuple] = None   # (onnx InferenceSession, Tokenizer, calibration dict|None)
+_bundle: Optional[tuple] = None   # (onnx InferenceSession, Tokenizer, calibration dict|None, is_cross bool)
 _load_failed = False
 
 
@@ -72,7 +82,18 @@ def _load() -> Optional[tuple]:
     if os.path.exists(cpath):
         with open(cpath, encoding="utf-8") as f:
             calib = json.load(f)
-    return session, tok, calib
+
+    # Detect which ONNX contract this artifact uses from its declared input
+    # names: the cross-encoder takes a single pair-encoded (input_ids,
+    # attention_mask, token_type_ids); the bi-encoder takes separate
+    # resume_*/jd_* pairs. This lets either artifact be dropped in place
+    # without a code change.
+    input_names = {i.name for i in session.get_inputs()}
+    is_cross = "token_type_ids" in input_names or (
+        "input_ids" in input_names and "resume_input_ids" not in input_names
+    )
+    log.info("match_predictor loaded (%s contract)", "cross-encoder" if is_cross else "bi-encoder")
+    return session, tok, calib, is_cross
 
 
 def _get_bundle() -> Optional[tuple]:
@@ -98,12 +119,25 @@ def _get_bundle() -> Optional[tuple]:
 
 
 def _encode(tok, text: str):
+    """Bi-encoder single-sequence encoding."""
     import numpy as np
 
     enc = tok.encode(text or "")
     ids = np.asarray([enc.ids], dtype=np.int64)
     mask = np.asarray([enc.attention_mask], dtype=np.int64)
     return ids, mask
+
+
+def _encode_pair(tok, resume_text: str, jd_text: str):
+    """Cross-encoder pair encoding: [CLS] resume [SEP] jd [SEP], with
+    token_type_ids 0 on the resume side and 1 on the JD side."""
+    import numpy as np
+
+    enc = tok.encode(resume_text or "", jd_text or "")
+    ids = np.asarray([enc.ids], dtype=np.int64)
+    mask = np.asarray([enc.attention_mask], dtype=np.int64)
+    type_ids = np.asarray([enc.type_ids], dtype=np.int64)
+    return ids, mask, type_ids
 
 
 def predict_fit(resume_text: str, jd_text: str) -> Optional[float]:
@@ -115,19 +149,31 @@ def predict_fit(resume_text: str, jd_text: str) -> Optional[float]:
     bundle = _get_bundle()
     if bundle is None:
         return None
-    session, tok, calib = bundle
+    session, tok, calib, is_cross = bundle
     try:
-        r_ids, r_mask = _encode(tok, resume_text)
-        j_ids, j_mask = _encode(tok, jd_text)
-        out = session.run(
-            ["fit_prob"],
-            {
-                "resume_input_ids": r_ids,
-                "resume_attention_mask": r_mask,
-                "jd_input_ids": j_ids,
-                "jd_attention_mask": j_mask,
-            },
-        )
+        if is_cross:
+            ids, mask, type_ids = _encode_pair(tok, resume_text, jd_text)
+            out = session.run(
+                ["fit_prob"],
+                {
+                    "input_ids": ids,
+                    "attention_mask": mask,
+                    "token_type_ids": type_ids,
+                },
+            )
+        else:
+            r_ids, r_mask = _encode(tok, resume_text)
+            j_ids, j_mask = _encode(tok, jd_text)
+            out = session.run(
+                ["fit_prob"],
+                {
+                    "resume_input_ids": r_ids,
+                    "resume_attention_mask": r_mask,
+                    "jd_input_ids": j_ids,
+                    "jd_attention_mask": j_mask,
+                },
+            )
+
         from src.match_predictor_calibration import apply_calibration
 
         prob = float(out[0].reshape(-1)[0])
