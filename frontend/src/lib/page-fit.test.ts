@@ -31,7 +31,7 @@ describe('estimatePageTarget', () => {
     expect(t.pages).toBe(2)
     expect(t.underUsedTrailingPage).toBe(true)
     expect(t.targetPages).toBe(1)
-    expect(t.targetLineBudget).toBe(52)
+    expect(t.targetLineBudget).toBe(50)
     expect(t.trimLines).toBeGreaterThan(0)
   })
 
@@ -40,7 +40,7 @@ describe('estimatePageTarget', () => {
     expect(t.pages).toBe(3)
     expect(t.underUsedTrailingPage).toBe(true)
     expect(t.targetPages).toBe(2)
-    expect(t.targetLineBudget).toBe(104)
+    expect(t.targetLineBudget).toBe(100)
   })
 
   it('leaves a well-used trailing page alone', () => {

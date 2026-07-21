@@ -55,7 +55,7 @@ def test_target_small_spill_onto_page_2_recommends_trim_to_one():
     assert t["under_used_trailing_page"] is True
     assert t["target_pages"] == 1
     assert t["trim_lines"] > 0
-    assert t["target_line_budget"] == 52.0
+    assert t["target_line_budget"] == 50.0
 
 
 def test_target_small_spill_onto_page_3_recommends_trim_to_two():
@@ -64,7 +64,7 @@ def test_target_small_spill_onto_page_3_recommends_trim_to_two():
     assert t["estimated_pages"] == 3
     assert t["under_used_trailing_page"] is True
     assert t["target_pages"] == 2
-    assert t["target_line_budget"] == 104.0
+    assert t["target_line_budget"] == 100.0
     assert t["trim_lines"] > 0
 
 

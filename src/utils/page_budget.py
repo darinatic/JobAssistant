@@ -2,9 +2,11 @@
 
 The template renders at a fixed density, so page count is a deterministic function
 of the markdown. Empirical calibration (rendering resumes of growing length through
-the real template and counting PDF pages with pypdf) put the one-page ceiling at
-~46 rendered lines; it spilled to a 2nd page at ~48. Each element maps to an
-estimated line height below, and long bullets wrap by character width.
+the real Roboto template and counting PDF pages with pypdf — see
+scripts/calibrate_page_budget.py) put the one-page ceiling at 53.8 estimator-lines
+(47 bullets spilled to a 2nd page); the last one-page resume scored 52.8 (46
+bullets). Each element maps to an estimated line height below, and long bullets
+wrap by character width.
 
 This lets us (a) tell the tailor a concrete budget, and (b) show the user a page
 estimate — without paying a Tectonic render on every tailor.
@@ -15,8 +17,9 @@ from __future__ import annotations
 import math
 import re
 
-# ~95 visible chars fit on one line at Latin Modern 11pt in this template's text
-# width (an ~88-char bullet rendered to exactly one line in calibration).
+# ~95 visible chars fit on one line at Roboto 11pt in this template's text width
+# (an ~88-char bullet rendered to exactly one line in calibration; re-verified
+# after the Latin Modern -> Roboto font swap, unchanged).
 _CHARS_PER_LINE = 95
 
 # Estimated rendered line-height per markdown element (calibrated to the template).
@@ -24,11 +27,12 @@ _H_NAME = 2.5      # '# Name' — large heading + the contact line's own cost is
 _H_SECTION = 2.0   # '## Section' — heading + the \section vertical spacing
 _H_ROLE = 1.3      # '### Role/Project' — subheading, tighter
 
-# One-page capacity in this estimator's units. Calibrated by rendering + counting
-# pages: the last one-page resume scored 54.1 and the first two-page one scored 55.1,
-# so 55 is the boundary. Target 52 leaves a safety margin for font/label variance.
-PAGE_LINE_CAPACITY = 55.0
-ONE_PAGE_TARGET = 52.0
+# One-page capacity in this estimator's units. Calibrated against the Roboto
+# template by rendering + counting pages (scripts/calibrate_page_budget.py): the
+# last one-page resume scored 52.8 and the first two-page one scored 53.8, so 53
+# is the boundary. Target 50 leaves a safety margin for font/label variance.
+PAGE_LINE_CAPACITY = 53.0
+ONE_PAGE_TARGET = 50.0
 
 # A trailing page holding at most this many rendered lines is "under-used" — a
 # small remainder spilling past a full page. Below the threshold we recommend

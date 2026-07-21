@@ -138,12 +138,12 @@ def test_tailor_legacy_concise_maps_to_balanced(client):
 
 
 def test_tailor_target_pages_sets_line_budget(client):
-    # target_pages=2 -> budget = 2 * ONE_PAGE_TARGET (52) = 104 lines.
+    # target_pages=2 -> budget = 2 * ONE_PAGE_TARGET (50) = 100 lines.
     mock = AsyncMock(return_value=_tailor_result())
     with patch("src.api.services.run_full_tailoring", new=mock):
         r = client.post("/tailor", json={"jd_text": _JD, "resume_markdown": _CV, "target_pages": 2})
     assert r.status_code == 200, r.text
-    assert mock.call_args.kwargs["target_line_budget"] == 104.0
+    assert mock.call_args.kwargs["target_line_budget"] == 100.0
 
 
 def test_tailor_without_target_pages_has_no_budget(client):

@@ -1,6 +1,6 @@
 // One-page estimator — mirrors src/utils/page_budget.py (calibrated against real
-// Tectonic renders: capacity 55 estimator-lines = one page in the ATS template).
-const _CHARS_PER_LINE = 95, _PAGE_CAPACITY = 55, _PAGE_TARGET = 52
+// Tectonic renders of the Roboto template: capacity 53 estimator-lines = one page).
+const _CHARS_PER_LINE = 95, _PAGE_CAPACITY = 53, _PAGE_TARGET = 50
 // A trailing page holding at most this many lines is an under-used remainder.
 const _TRAILING_TRIM_MAX = 15
 
