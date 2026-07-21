@@ -17,12 +17,14 @@ services:
         value: "true"
       - key: LOG_LEVEL
         value: INFO
-      # Learned resume<->JD fit predictor — ranks search results by fit. Turns the
-      # feature on; the model is pulled from a HuggingFace repo (set MATCH_PREDICTOR_REPO
-      # + HF_TOKEN in the dashboard). If the artifact can't load, it degrades gracefully
-      # to lexical relevance — no breakage.
+      # Learned resume<->JD fit predictor — ranks search results by fit. The model
+      # artifact is baked into the image at build (COPY models/ in the Dockerfile),
+      # so there's no runtime download. If it can't load, it degrades gracefully to
+      # lexical relevance — no breakage.
       - key: MATCH_PREDICTOR_MODEL
         value: v1
+      - key: MATCH_PREDICTOR_PATH
+        value: /app/models/fit-predictor
       # Secrets — set these in the Render dashboard (Blueprint prompts on first deploy).
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -30,7 +32,3 @@ services:
         sync: false
       - key: BROWSERBASE_PROJECT_ID
         sync: false
-      - key: MATCH_PREDICTOR_REPO
-        sync: false            # your HuggingFace repo id, e.g. you/resume-fit-onnx
-      - key: HF_TOKEN
-        sync: false            # only needed if the HF repo is private

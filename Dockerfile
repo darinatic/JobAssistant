@@ -48,6 +48,10 @@ RUN printf '\\documentclass{article}\\begin{document}warmup\\end{document}' > /t
 # The built SPA — FastAPI serves it from the same origin (see api.py static mount).
 COPY --from=frontend /app/frontend/dist ./frontend/dist
 
+# The learned fit-predictor artifact (model.onnx + tokenizer.json), baked in so
+# the container starts without a runtime download. MATCH_PREDICTOR_PATH points here.
+COPY models/ ./models/
+
 EXPOSE 8080
 # cwd /app is on sys.path so `src` + `frontend/dist` resolve relative to it.
 CMD ["sh", "-c", "uvicorn src.api:app --host 0.0.0.0 --port ${PORT:-8080}"]
