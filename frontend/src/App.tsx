@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Skeleton } from '@/components/ui/skeleton'
 import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
@@ -15,6 +14,11 @@ import { fitLabel } from '@/lib/fit'
 
 // Stable per-job key for the pending/enrichment set.
 const jobKey = (j: { platform: string; external_id: string }) => `${j.platform}:${j.external_id}`
+
+// Ranking: a job with a description sorts by learned fit (else lexical relevance);
+// jobs still lacking a description (e.g. LinkedIn-walled) sink below all rated ones
+// rather than floating up on a misleading title-only relevance.
+const jobRank = (j: Job) => (j.has_description ? (j.fit ?? j.relevance ?? 0) : -1)
 
 const CV_KEY = 'overlap.cv'
 const SEARCH_KEY = 'overlap.search'
@@ -209,7 +213,7 @@ function Home() {
     const same = (j: Job) => j.platform === u.platform && j.external_id === u.external_id
     setJobs((prev) => {
       const next = prev.map((j) => (same(j) ? { ...j, ...u } : j))
-      return cv ? [...next].sort((a, b) => (b.fit ?? b.relevance ?? 0) - (a.fit ?? a.relevance ?? 0)) : next
+      return cv ? [...next].sort((a, b) => jobRank(b) - jobRank(a)) : next
     })
     setActiveJob((prev) =>
       prev?.job && same(prev.job) ? { job: { ...prev.job, ...u }, jd: u.description ?? prev.jd } : prev,
@@ -278,7 +282,7 @@ function Home() {
             if (!j.has_description) setPending((prev) => new Set(prev).add(k))
             setJobs((prev) => {
               const next = [...prev, j]
-              return cv ? next.sort((a, b) => (b.fit ?? b.relevance ?? 0) - (a.fit ?? a.relevance ?? 0)) : next
+              return cv ? next.sort((a, b) => jobRank(b) - jobRank(a)) : next
             })
           },
           onDone: () => {},
@@ -497,9 +501,15 @@ function Home() {
                   </p>
                 )}
                 {!searching && pending.size > 0 && (
-                  <p className="font-mono text-xs text-muted-foreground animate-pulse">
-                    ▸ loading keywords for {pending.size} more {pending.size === 1 ? 'job' : 'jobs'}…
-                  </p>
+                  <div className="space-y-1.5">
+                    <p className="font-mono text-xs text-muted-foreground">
+                      ▸ scoring jobs, {jobs.length - pending.size} of {jobs.length} ready…
+                    </p>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary transition-[width] duration-300"
+                        style={{ width: `${jobs.length ? Math.round((100 * (jobs.length - pending.size)) / jobs.length) : 0}%` }} />
+                    </div>
+                  </div>
                 )}
 
                 {insights ? (
@@ -534,11 +544,13 @@ function Home() {
                 ) : null}
 
                 <div className="space-y-2">
-                  {jobs.map((job) => {
+                  {/* Reveal-as-ready: a job appears only once it's scored (has a
+                      description → keywords + fit). Still-loading jobs stay hidden
+                      behind the progress bar above; walled ones surface as unrated. */}
+                  {jobs.filter((job) => !pending.has(jobKey(job))).map((job) => {
                     const have = job.matched_skills ?? []
                     const missing = job.missing_skills ?? []
                     const total = have.length + missing.length
-                    const isPending = pending.has(jobKey(job))
                     return (
                       <button key={`${job.platform}-${job.external_id}`} onClick={() => openJob(job)}
                         className="w-full text-left rounded-lg border bg-card p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -548,21 +560,14 @@ function Home() {
                             <div className="mt-1.5"><JobMeta job={job} /></div>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
-                            {isPending ? <Skeleton className="h-4 w-16" />
-                              : job.fit != null ? <FitBadge fit={job.fit} allFits={allFits} />
+                            {job.fit != null ? <FitBadge fit={job.fit} allFits={allFits} />
                               : <span className="eyebrow text-muted-foreground">unrated</span>}
                             {total > 0 && <Coverage have={have.length} total={total} />}
                             <span className="eyebrow">open →</span>
                           </div>
                         </div>
                         <div className="mt-3">
-                          {isPending ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              <Skeleton className="h-5 w-16 rounded-full" />
-                              <Skeleton className="h-5 w-24 rounded-full" />
-                              <Skeleton className="h-5 w-14 rounded-full" />
-                            </div>
-                          ) : total > 0 ? (
+                          {total > 0 ? (
                             <div className="flex flex-wrap items-center gap-2"><Tokens have={have} missing={missing} /></div>
                           ) : (
                             <p className="text-xs text-muted-foreground">No description found. Open to view the posting.</p>
