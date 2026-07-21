@@ -15,7 +15,6 @@ import {
   DATE_OPTIONS, EXPERIENCE_OPTIONS, PLATFORM_OPTIONS, REMOTE_OPTIONS, MAX_JOBS_OPTIONS,
   DEFAULT_FILTERS, filtersFromInterpreted, toRequestFilters, type FilterState,
 } from '@/lib/search-filters'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 // Stable per-job key for the pending/enrichment set.
 const jobKey = (j: { platform: string; external_id: string }) => `${j.platform}:${j.external_id}`
@@ -503,47 +502,47 @@ function Home() {
                 )}
 
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="eyebrow mr-1">filters</span>
-                    <Select value={filters.datePosted} onValueChange={setDate}>
-                      <SelectTrigger className="h-7 w-[130px] text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {DATE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Select value={String(filters.maxJobs)} onValueChange={(v) => setMax(Number(v))}>
-                      <SelectTrigger className="h-7 w-[110px] text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {MAX_JOBS_OPTIONS.map((n) => <SelectItem key={n} value={String(n)} className="text-xs">max {n}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="eyebrow mr-1">date</span>
+                    {DATE_OPTIONS.map((o) => (
+                      <button key={o.value} type="button" onClick={() => setDate(o.value)}
+                        className={filters.datePosted === o.value ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="eyebrow mr-1">max jobs</span>
+                    {MAX_JOBS_OPTIONS.map((n) => (
+                      <button key={n} type="button" onClick={() => setMax(n)}
+                        className={filters.maxJobs === n ? 'tok tok-have' : 'tok opacity-60'}>{n}</button>
+                    ))}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="eyebrow mr-1">platforms</span>
+                    <span className="mr-1 text-[10px] italic text-muted-foreground">none = all</span>
                     {PLATFORM_OPTIONS.map((o) => (
                       <button key={o.value} type="button" onClick={() => toggleFilter('platforms', o.value)}
                         className={filters.platforms.includes(o.value) ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
                     ))}
-                    <span className="eyebrow ml-1 text-muted-foreground">none = all</span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="eyebrow mr-1">experience</span>
+                    <span className="mr-1 text-[10px] italic text-muted-foreground">LinkedIn + MyCareersFuture only</span>
                     {EXPERIENCE_OPTIONS.map((o) => (
                       <button key={o.value} type="button" onClick={() => toggleFilter('experienceLevels', o.value)}
                         className={filters.experienceLevels.includes(o.value) ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
                     ))}
-                    <span className="eyebrow ml-1 text-muted-foreground">LinkedIn + MyCareersFuture only</span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="eyebrow mr-1">remote</span>
+                    <span className="mr-1 text-[10px] italic text-muted-foreground">LinkedIn only</span>
                     {REMOTE_OPTIONS.map((o) => (
                       <button key={o.value} type="button" onClick={() => toggleFilter('remoteOptions', o.value)}
                         className={filters.remoteOptions.includes(o.value) ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
                     ))}
-                    <span className="eyebrow ml-1 text-muted-foreground">LinkedIn only</span>
                   </div>
                 </div>
 
