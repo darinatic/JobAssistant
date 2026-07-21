@@ -1,0 +1,18 @@
+%% Live job search — concurrent scrape, lazy descriptions, background enrichment
+flowchart TB
+    Q["Natural-language query<br/>e.g. '50 remote AI jobs on JobStreet this week'"] --> NLP["parse_search_query<br/>(Haiku 4.5)"]
+    NLP --> F["structured filters<br/>keyword · location · recency · seniority · remote · count · platforms"]
+    F --> S["search_jobs — 3 platforms run CONCURRENTLY"]
+
+    S --> MCF["MyCareersFuture<br/>JSON /v2/jobs · full JD inline"]
+    S --> LI["LinkedIn<br/>guest HTML · cards only"]
+    S --> JS["JobStreet<br/>Patchright browser · cards only"]
+
+    MCF --> QU["asyncio.Queue<br/>(yield cards as they arrive)"]
+    LI --> QU
+    JS --> QU
+    QU --> RANK["tag per-job skill have/missing<br/>+ relevance vs CV, rank"]
+    RANK --> UI["SPA listing (NDJSON stream)"]
+
+    UI -. "open a job in the drawer" .-> DESC["POST /job/description<br/>lazy full JD + skill split"]
+    UI -. "after first render (background)" .-> ENR["POST /jobs/enrich/stream<br/>backfill every card's keywords"]

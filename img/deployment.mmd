@@ -1,0 +1,14 @@
+%% Deployment — single Docker image on Render, auto-deployed by GitHub Actions
+flowchart LR
+    DEV["git push origin main"] --> CI["GitHub Actions CI<br/>pytest + frontend build (the gate)"]
+    CI --> RND["Render Blueprint (render.yaml)<br/>auto-deploy on push · Singapore region"]
+
+    subgraph IMG["Single multi-stage Docker image"]
+        FE["FastAPI serves the built SPA<br/>(frontend/dist, same-origin static mount)"]
+        TECB["Tectonic baked in (PDF)"]
+        CHR["Chromium baked in (scrapers)"]
+    end
+
+    RND --> IMG
+    IMG -. "prod scrape via BROWSERBASE_SCRAPERS" .-> BB["Browserbase cloud browser<br/>(survives datacenter IP)"]
+    IMG -. "/health check" .-> HC["liveness"]

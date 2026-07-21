@@ -1,0 +1,22 @@
+%% System architecture — Overlap (stateless, no DB, no auth)
+flowchart TB
+    subgraph Client["Browser — React 19 SPA (Vite)"]
+        CV["CV + search results held in localStorage"]
+    end
+
+    subgraph Backend["FastAPI backend — stateless pure functions"]
+        RL["Per-IP rate limiter (in-memory)"]
+        SVC["services · LangGraph · search · intel · insights"]
+    end
+
+    Client -- "JSON over HTTP (CV re-sent each request)" --> RL
+    RL --> SVC
+
+    SVC -- "Haiku 4.5 — JD parse · NL query · JD clean-up" --> ANTH["Anthropic Claude"]
+    SVC -- "Sonnet 4.5 — tailor · cover letter" --> ANTH
+    SVC -- "markdown -> LaTeX -> PDF" --> TEC["Tectonic (external binary)"]
+    SVC -- "skill match, ~1ms, no LLM" --> GAZ["Local gazetteer matcher"]
+    SVC -- "scrape live jobs" --> SCR["Scrapers: MyCareersFuture JSON · LinkedIn guest HTML · JobStreet (Patchright)"]
+    SVC -- "optional cloud browser (prod)" --> BB["Browserbase"]
+
+    SVC -- "response (ephemeral)" --> Client

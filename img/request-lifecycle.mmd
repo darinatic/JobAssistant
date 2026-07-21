@@ -1,0 +1,23 @@
+%% Stateless request lifecycle — the client holds the CV; the server stores nothing
+sequenceDiagram
+    actor U as User
+    participant B as Browser (localStorage)
+    participant A as FastAPI (stateless)
+
+    U->>B: upload resume (PDF)
+    B->>A: POST /resume/parse (multipart)
+    A-->>B: markdown CV (returned, NOT stored)
+    B->>B: keep CV in localStorage
+    Note over B,A: every later request re-sends the CV in its body
+
+    B->>A: POST /search {query, resume_markdown}
+    A-->>B: jobs[] + interpreted filters (ephemeral)
+
+    B->>A: POST /job/description {platform, external_id, url, resume_markdown}
+    A-->>B: full JD + skill overlap
+
+    B->>A: POST /tailor {jd_text, resume_markdown, style}
+    A-->>B: tailored markdown + honesty[]
+
+    B->>A: POST /tailored/resume.pdf {resume_markdown}
+    A-->>B: ATS-safe PDF (never persisted)

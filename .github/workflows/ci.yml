@@ -1,0 +1,37 @@
+name: CI
+
+# Tests gate every push/PR. Deployment is handled natively by Render
+# (auto-deploy on push to main) — no deploy job or token needed here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: pip install -e ".[dev]"
+      - name: Backend tests
+        env:
+          # Dummy key: tests mock the LLM calls, but importing config requires a value.
+          ANTHROPIC_API_KEY: sk-ant-ci-dummy
+        run: pytest tests/ -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build

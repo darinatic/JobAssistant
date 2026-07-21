@@ -1,0 +1,35 @@
+# VCS + envs
+.git
+.github
+.venv
+venv
+env
+
+# python
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+build
+dist
+*.egg-info
+
+# node / frontend (rebuilt inside the image)
+frontend/node_modules
+frontend/dist
+
+# secrets + local data — NEVER ship these
+.env
+*.pdf
+master_cv.md
+outputs
+browser_data
+artifacts
+notebooks
+scripts
+
+# docs/tests not needed at runtime
+tests
+*.md
+!README.md

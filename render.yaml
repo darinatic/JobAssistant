@@ -1,0 +1,26 @@
+# Render Blueprint. Deploy via https://dashboard.render.com/blueprints (New → Blueprint,
+# pick this repo) or connect the repo as a Web Service and it auto-detects the Dockerfile.
+# See DEPLOY.md. Render auto-deploys on every push to the connected branch — no CI token.
+services:
+  - type: web
+    name: overlap
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore
+    plan: free                 # free = 512MB / spins down when idle; bump to keep warm
+    healthCheckPath: /health
+    envVars:
+      # Route the JobStreet scraper through Browserbase so it survives Render's IP.
+      - key: BROWSERBASE_SCRAPERS
+        value: "true"
+      - key: BROWSERBASE_PROXIES
+        value: "true"
+      - key: LOG_LEVEL
+        value: INFO
+      # Secrets — set these in the Render dashboard (Blueprint prompts on first deploy).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: BROWSERBASE_API_KEY
+        sync: false
+      - key: BROWSERBASE_PROJECT_ID
+        sync: false

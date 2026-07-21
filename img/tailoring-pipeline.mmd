@@ -1,0 +1,15 @@
+%% Resume tailoring — LangGraph state machine (src/graph/workflow.py)
+flowchart LR
+    IN["JD text + master CV"] --> P["parse_jd<br/>(Haiku 4.5)"]
+    P --> M["match<br/>(local gazetteer, no LLM)"]
+    M -- "missing_required = hard 'NEVER claim' list" --> T["tailor<br/>(Sonnet 4.5)"]
+    M -- "gap_analysis: surfaceable vs genuine gaps" --> T
+    T --> H["honesty linter<br/>(deterministic, ~1ms)"]
+    H --> OUT["tailored markdown<br/>+ honesty[] advisories"]
+    T -. "separate on-demand button" .-> CL["cover_letter<br/>(Sonnet 4.5)"]
+    OUT --> PDF["Tectonic -> ATS-safe single-column PDF"]
+
+    classDef llm fill:#2b6cb0,color:#fff;
+    classDef det fill:#276749,color:#fff;
+    class P,T,CL llm;
+    class M,H det;

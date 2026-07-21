@@ -1,0 +1,4 @@
+%% Intel panel — legitimacy red-flags (src/intel/)
+flowchart TB
+    OPEN["Open a job in the drawer"] --> RF["POST /job/red-flags<br/>(auto, deterministic, no LLM)"]
+    RF --> RFO["Red-flag list: upfront-payment · messaging-only ·<br/>personal-email · sensitive-data · too-good-salary ·<br/>urgency · vague-JD · unlicensed-agency · stale · evergreen<br/>cited to FTC / SPF / MOM · advisory · never blocks"]
