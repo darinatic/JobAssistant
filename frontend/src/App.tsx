@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
-import { ResumeEditor } from '@/components/ResumeEditor'
+import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
 
@@ -437,7 +437,7 @@ function Home() {
             </div>
             {cv && cvOpen && (
               <div className="mt-4 space-y-1.5">
-                <ResumeEditor value={cv} onChange={updateCv} showPageBadge />
+                <ResumeWorkspace value={cv} onChange={updateCv} showPageBadge label="your resume" />
                 <p className="text-xs text-muted-foreground">
                   Fix any PDF-parsing glitches here — this is the exact CV used for matching and tailoring. Saved to your browser as you type.
                 </p>
@@ -727,7 +727,7 @@ function Home() {
                         }} disabled={!editedResume.trim()}>Download resume PDF</Button>
                       </div>
                     </div>
-                    <ResumeEditor value={editedResume} onChange={setEditedResume} showPageBadge />
+                    <ResumeWorkspace value={editedResume} onChange={setEditedResume} showPageBadge label="tailored resume" />
                   </div>
 
                   <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
