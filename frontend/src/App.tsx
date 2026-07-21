@@ -35,7 +35,7 @@ const STYLES = [
   { key: 'balanced' as const, hint: 'Condense weak content and drop the irrelevant. Aims for one page.' },
   { key: 'aggressive' as const, hint: 'Restructure, cut low-relevance sections, hard one page. Max fit.' },
 ]
-type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[]; filters?: FilterState }
+type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[]; filters?: FilterState; manualFilters?: boolean }
 
 function loadSearch(): SavedSearch {
   try { return JSON.parse(localStorage.getItem(SEARCH_KEY) || '{}') } catch { return {} }
@@ -140,7 +140,7 @@ function Home() {
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
   const [filters, setFilters] = useState<FilterState>(saved.filters ?? DEFAULT_FILTERS)
   // NL box edited -> next search is an AI parse; a dropdown touched -> deterministic (no-LLM) search.
-  const [manualFilters, setManualFilters] = useState(false)
+  const [manualFilters, setManualFilters] = useState(saved.manualFilters ?? false)
   const [searching, setSearching] = useState(false)
   // Job keys still backfilling their description/keywords/fit, drives per-card skeletons.
   const [pending, setPending] = useState<Set<string>>(() => new Set())
@@ -208,8 +208,8 @@ function Home() {
   // losing everything. Skip writing while a search is streaming in.
   useEffect(() => {
     if (searching) return
-    try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs, filters })) } catch { /* quota */ }
-  }, [query, interpreted, jobs, filters, searching])
+    try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs, filters, manualFilters })) } catch { /* quota */ }
+  }, [query, interpreted, jobs, filters, manualFilters, searching])
 
   // Abort any in-flight streams when the page unmounts (refresh/navigate).
   useEffect(() => () => { searchAbort.current?.abort(); enrichAbort.current?.abort() }, [])
@@ -292,7 +292,7 @@ function Home() {
           filters: manualFilters ? toRequestFilters(filters, query, interpreted?.location ?? 'Singapore') : undefined,
         },
         {
-          onInterpreted: (d) => { setInterpreted(d); setFilters(filtersFromInterpreted(d)); setManualFilters(false) },
+          onInterpreted: (d) => { setInterpreted(d); setFilters(filtersFromInterpreted(d)) },
           onJob: (j) => {
             // A platform can return the same posting twice; skip duplicates so the
             // list keys stay unique and a job isn't double-counted.
