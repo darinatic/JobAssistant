@@ -11,7 +11,11 @@ import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
-import { DEFAULT_FILTERS, filtersFromInterpreted, toRequestFilters, type FilterState } from '@/lib/search-filters'
+import {
+  DATE_OPTIONS, EXPERIENCE_OPTIONS, PLATFORM_OPTIONS, REMOTE_OPTIONS, MAX_JOBS_OPTIONS,
+  DEFAULT_FILTERS, filtersFromInterpreted, toRequestFilters, type FilterState,
+} from '@/lib/search-filters'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 // Stable per-job key for the pending/enrichment set.
 const jobKey = (j: { platform: string; external_id: string }) => `${j.platform}:${j.external_id}`
@@ -261,6 +265,16 @@ function Home() {
     } catch (e) { toast.error(err(e)) } finally { setUploading(false) }
   }
 
+  function toggleFilter(key: 'experienceLevels' | 'remoteOptions' | 'platforms', value: string) {
+    setManualFilters(true)
+    setFilters((f) => {
+      const has = f[key].includes(value)
+      return { ...f, [key]: has ? f[key].filter((v) => v !== value) : [...f[key], value] }
+    })
+  }
+  function setDate(value: string) { setManualFilters(true); setFilters((f) => ({ ...f, datePosted: value })) }
+  function setMax(value: number) { setManualFilters(true); setFilters((f) => ({ ...f, maxJobs: value })) }
+
   async function onSearch() {
     if (!cv) return toast.error('Upload your resume first, then search.')
     if (query.trim().length < 2) return
@@ -488,20 +502,50 @@ function Home() {
                   </p>
                 )}
 
-                {interpreted && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="eyebrow mr-1">interpreted</span>
-                    <span className="tok tok-have">{interpreted.keyword}</span>
-                    <span className="tok">{interpreted.location}</span>
-                    <span className="tok">{interpreted.platforms?.length ? interpreted.platforms.join(' · ') : 'all platforms'}</span>
-                    {interpreted.date_posted && interpreted.date_posted !== 'any' && (
-                      <span className="tok">{String(interpreted.date_posted).replace(/_/g, ' ')}</span>
-                    )}
-                    {interpreted.remote_options?.length ? <span className="tok">{interpreted.remote_options.join(' · ')}</span> : null}
-                    {interpreted.experience_levels?.length ? <span className="tok">{interpreted.experience_levels.join(' · ')}</span> : null}
-                    <span className="tok">max {interpreted.max_jobs}</span>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="eyebrow mr-1">filters</span>
+                    <Select value={filters.datePosted} onValueChange={setDate}>
+                      <SelectTrigger className="h-7 w-[130px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {DATE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={String(filters.maxJobs)} onValueChange={(v) => setMax(Number(v))}>
+                      <SelectTrigger className="h-7 w-[110px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MAX_JOBS_OPTIONS.map((n) => <SelectItem key={n} value={String(n)} className="text-xs">max {n}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="eyebrow mr-1">platforms</span>
+                    {PLATFORM_OPTIONS.map((o) => (
+                      <button key={o.value} type="button" onClick={() => toggleFilter('platforms', o.value)}
+                        className={filters.platforms.includes(o.value) ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
+                    ))}
+                    <span className="eyebrow ml-1 text-muted-foreground">none = all</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="eyebrow mr-1">experience</span>
+                    {EXPERIENCE_OPTIONS.map((o) => (
+                      <button key={o.value} type="button" onClick={() => toggleFilter('experienceLevels', o.value)}
+                        className={filters.experienceLevels.includes(o.value) ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
+                    ))}
+                    <span className="eyebrow ml-1 text-muted-foreground">LinkedIn + MyCareersFuture only</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="eyebrow mr-1">remote</span>
+                    {REMOTE_OPTIONS.map((o) => (
+                      <button key={o.value} type="button" onClick={() => toggleFilter('remoteOptions', o.value)}
+                        className={filters.remoteOptions.includes(o.value) ? 'tok tok-have' : 'tok opacity-60'}>{o.label}</button>
+                    ))}
+                    <span className="eyebrow ml-1 text-muted-foreground">LinkedIn only</span>
+                  </div>
+                </div>
 
                 {searching && (
                   <p className="font-mono text-xs text-muted-foreground animate-pulse">
