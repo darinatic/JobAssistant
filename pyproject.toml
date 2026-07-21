@@ -76,6 +76,7 @@ dev = [
 eval = [
     "mlflow>=2.14.0",
     "openai>=1.40.0",   # LLM-as-judge (evals/judge.py)
+    "langsmith>=0.1.100",  # scripts/eval_match_predictor.py Dataset + Experiment logging
 ]
 
 # Optional LangSmith observability — LLM tracing + Hub prompt versioning. langsmith
