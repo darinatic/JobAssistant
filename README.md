@@ -189,7 +189,7 @@ flowchart TB
 
 **Optional extras (dev/experiment only, never in prod):**
 
-- `[eval]` — **MLflow** experiment tracking + **OpenAI** LLM-as-judge for the prompt-eval harness (`evals/`). The judge is deliberately cross-provider (app = Claude, judge = OpenAI).
+- `[eval]` — **LangSmith** experiment tracking (project `resumeagent-evals`) + **OpenAI** LLM-as-judge for the prompt-eval harness (`evals/`). The judge is deliberately cross-provider (app = Claude, judge = OpenAI).
 - `[predictor]` — **ONNX Runtime** + `tokenizers` to serve a resume↔JD fit predictor (flag-gated, off by default).
 - `[train]` — the GPU training box for that predictor (PyTorch, Lightning, SBERT, PEFT, etc.).
 
@@ -378,7 +378,7 @@ resume-agent/
 │   ├── browser/                    # Patchright stealth profile (JobStreet)
 │   ├── match_predictor.py          # optional ONNX fit predictor (flag-gated, off by default)
 │   └── utils/                      # config.py + latex_renderer.py + pdf_converter.py
-├── evals/                          # dev-only prompt-eval harness (golden set, graders, MLflow, OpenAI judge)
+├── evals/                          # dev-only prompt-eval harness (golden set, graders, LangSmith, OpenAI judge)
 ├── frontend/                       # Vite + React 19 + TS + Tailwind v4 + shadcn/ui (single-page App.tsx)
 └── tests/                          # pytest
 ```

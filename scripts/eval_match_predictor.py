@@ -63,7 +63,7 @@ def main() -> int:
 
     ds = load_dataset(args.dataset)
     split = "test" if "test" in ds else "validation"
-    rows = ds[split]
+    rows = ds[split].shuffle(seed=13)  # the split is ORDERED BY LABEL — must shuffle before truncating to --limit
     cols = rows.column_names
     rc = next(c for c in cols if "resume" in c.lower())
     jc = next(c for c in cols if "job" in c.lower() or "description" in c.lower())

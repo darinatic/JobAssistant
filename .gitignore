@@ -92,7 +92,6 @@ docs/
 # personal resume PDFs at repo root
 /*.pdf
 
-# MLflow local tracking store (eval experiments)
+# stray local experiment-tracking artifacts (eval tracking is LangSmith now, no local store)
 mlruns/
 mlartifacts/
-mlflow.db
