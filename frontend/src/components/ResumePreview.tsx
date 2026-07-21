@@ -47,7 +47,14 @@ export function ResumePreview({ md }: { md: string }) {
           case 'section':
             return <h2 key={i} className="mt-3 mb-1 border-b border-black/60 pb-0.5 text-[12px] font-bold uppercase tracking-wide">{inline(b.text, `s${i}`)}</h2>
           case 'role':
-            return <p key={i} className="mt-1.5 font-semibold">{inline(b.text, `r${i}`)}</p>
+            return b.date ? (
+              <p key={i} className="mt-1.5 flex items-baseline justify-between gap-3 font-semibold">
+                <span>{inline(b.text, `r${i}`)}</span>
+                <span className="shrink-0">{inline(b.date, `rd${i}`)}</span>
+              </p>
+            ) : (
+              <p key={i} className="mt-1.5 font-semibold">{inline(b.text, `r${i}`)}</p>
+            )
           case 'bullets':
             return (
               <ul key={i} className="my-0.5 list-disc pl-5">

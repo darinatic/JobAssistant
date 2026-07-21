@@ -215,7 +215,15 @@ def markdown_to_latex(md_content: str, candidate_name: str = "Resume") -> str:
             out.append(r"\section*{" + _inline(stripped[3:].strip()) + "}")
         elif stripped.startswith("### "):
             close_list()
-            out.append(r"\textbf{" + _inline(stripped[4:].strip()) + r"}\par")
+            heading = stripped[4:].strip()
+            # A trailing " | date" segment is right-aligned to the margin (standard
+            # resume layout: role on the left, dates on the right). rpartition splits
+            # on the LAST " | " so a company name with no pipe keeps the whole label.
+            left, sep, date = heading.rpartition(" | ")
+            if sep:
+                out.append(r"\textbf{" + _inline(left.strip()) + r"}\hfill " + _inline(date.strip()) + r"\par")
+            else:
+                out.append(r"\textbf{" + _inline(heading) + r"}\par")
         elif stripped.startswith("#"):
             close_list()
             out.append(r"\textbf{" + _inline(stripped.lstrip("# ").strip()) + r"}\par")

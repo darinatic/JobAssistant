@@ -2,7 +2,7 @@ export type ResumeBlock =
   | { kind: 'name'; text: string }
   | { kind: 'contact'; items: string[] }
   | { kind: 'section'; text: string }
-  | { kind: 'role'; text: string }
+  | { kind: 'role'; text: string; date?: string }
   | { kind: 'bullets'; items: string[] }
   | { kind: 'para'; text: string }
 
@@ -46,7 +46,15 @@ export function parseResume(md: string): ResumeBlock[] {
     const s = lines[i].trim()
     if (!s) { flush(); continue }
     if (s.startsWith('## ')) { flush(); blocks.push({ kind: 'section', text: s.slice(3).trim() }) }
-    else if (s.startsWith('### ')) { flush(); blocks.push({ kind: 'role', text: s.slice(4).trim() }) }
+    else if (s.startsWith('### ')) {
+      flush()
+      const heading = s.slice(4).trim()
+      // Mirror the backend's rpartition(" | "): split on the LAST " | " so a
+      // trailing date renders right-aligned, matching the PDF layout.
+      const idx = heading.lastIndexOf(' | ')
+      if (idx === -1) blocks.push({ kind: 'role', text: heading })
+      else blocks.push({ kind: 'role', text: heading.slice(0, idx).trim(), date: heading.slice(idx + 3).trim() })
+    }
     else if (s.startsWith('#')) { flush(); blocks.push({ kind: 'role', text: s.replace(/^#+\s*/, '').trim() }) }
     else if (/^[-*+]\s+/.test(s)) { (bullets ??= []).push(s.replace(/^[-*+]\s+/, '').trim()) }
     else { flush(); blocks.push({ kind: 'para', text: s }) }

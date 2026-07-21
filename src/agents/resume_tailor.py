@@ -189,8 +189,10 @@ class ResumeTailorAgent:
    separated by ` | ` and links as short text (`linkedin.com/in/x`,
    `github.com/x` — DROP the `https://`); `## ` for each section heading; `### `
    for each role/project title. Write EVERY experience and project achievement as
-   its own bullet starting with `- ` (never as a plain paragraph). Use `**bold**`
-   for company/date lines.
+   its own bullet starting with `- ` (never as a plain paragraph). Put each role's
+   date range at the END of its `### ` heading after a ` | ` separator (e.g.
+   `### ML Engineer, Acme Corp | 2023 - Present`) so it right-aligns in the PDF;
+   do NOT put the date on its own line. Use `**bold**` only for in-bullet emphasis.
 3. **Honesty (hard rule)**: only use skills, tools, and experience that appear in
    the candidate's CV above. NEVER add any skill from the "Skills NOT in the
    candidate's CV" list, and never invent domains, metrics, methods, or titles.

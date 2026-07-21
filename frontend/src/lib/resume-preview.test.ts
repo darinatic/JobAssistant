@@ -27,4 +27,14 @@ describe('parseResume', () => {
     expect(blocks[1]).toEqual({ kind: 'bullets', items: ['a', 'b'] })
     expect(blocks[2]).toEqual({ kind: 'para', text: 'Plain line' })
   })
+
+  it('splits a ### role heading on the LAST " | " into label + date', () => {
+    const blocks = parseResume('### ML Engineer, Acme Corp | 2023 - Present')
+    expect(blocks[0]).toEqual({ kind: 'role', text: 'ML Engineer, Acme Corp', date: '2023 - Present' })
+  })
+
+  it('leaves a ### role heading without " | " unchanged', () => {
+    const blocks = parseResume('### Acme — Engineer')
+    expect(blocks[0]).toEqual({ kind: 'role', text: 'Acme — Engineer' })
+  })
 })

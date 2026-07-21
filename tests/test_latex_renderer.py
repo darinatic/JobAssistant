@@ -147,6 +147,21 @@ def test_cover_letter_uses_sans_serif_font():
     assert r"\usepackage{lmodern}" not in tex
 
 
+def test_role_heading_right_aligns_trailing_date():
+    md = "# X\n\n## Experience\n### ML Engineer, Acme Corp | 2023 - Present\n- Shipped things"
+    tex = markdown_to_latex(md)
+    # Left part bolded, date pushed to the right margin with \hfill.
+    assert r"\textbf{ML Engineer, Acme Corp}\hfill" in tex
+    assert "2023 - Present" in tex
+
+
+def test_role_heading_without_pipe_is_unchanged():
+    md = "# X\n\n## Experience\n### ML Engineer at Acme\n- Shipped things"
+    tex = markdown_to_latex(md)
+    assert r"\textbf{ML Engineer at Acme}\par" in tex
+    assert r"\hfill" not in tex
+
+
 @pytest.mark.skipif(not _HAS_TECTONIC, reason="Tectonic not installed")
 def test_end_to_end_compile_produces_pdf():
     tex = markdown_to_latex(_SAMPLE_MD)
