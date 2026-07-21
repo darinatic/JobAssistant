@@ -113,6 +113,7 @@ class JobDescriptionRequest(BaseModel):
     platform: str
     external_id: str = ""
     url: str = ""
+    title: str = ""
     resume_markdown: Optional[str] = None
 
 
@@ -122,6 +123,7 @@ class JobDescriptionResponse(BaseModel):
     matched_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     relevance: int = 0
+    fit: Optional[int] = None  # learned fit 0-100 when the predictor is enabled
 
 
 class RedFlagsRequest(BaseModel):
@@ -351,15 +353,18 @@ async def job_description(req: JobDescriptionRequest) -> JobDescriptionResponse:
     have: list[str] = []
     missing: list[str] = []
     relevance = 0
+    fit = None
     if text and req.resume_markdown:
         cv_skills = extract_skills(req.resume_markdown)
         jd_skills = extract_skills(text)
         have = sorted(jd_skills & cv_skills)
         missing = sorted(jd_skills - cv_skills)
         relevance = round(100 * len(have) / len(jd_skills)) if jd_skills else 0
+        # Learned fit (same signal the search cards rank by; None when off).
+        fit = await job_search._fit_pct(req.resume_markdown, req.title, text)
     return JobDescriptionResponse(
         description=text, has_description=bool(text.strip()),
-        matched_skills=have, missing_skills=missing, relevance=relevance,
+        matched_skills=have, missing_skills=missing, relevance=relevance, fit=fit,
     )
 
 

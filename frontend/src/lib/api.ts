@@ -188,8 +188,8 @@ export const api = {
 
   insights: (body: { jobs: Job[]; resume_markdown?: string }) => postJson<Insights>('/insights', body),
 
-  jobDescription: (body: { platform: string; external_id?: string; url?: string; resume_markdown?: string }) =>
-    postJson<{ description: string; has_description: boolean; matched_skills: string[]; missing_skills: string[]; relevance: number }>('/job/description', body),
+  jobDescription: (body: { platform: string; external_id?: string; url?: string; title?: string; resume_markdown?: string }) =>
+    postJson<{ description: string; has_description: boolean; matched_skills: string[]; missing_skills: string[]; relevance: number; fit?: number }>('/job/description', body),
 
   tailor: (body: {
     jd_text: string

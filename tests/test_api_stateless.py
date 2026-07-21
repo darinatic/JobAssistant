@@ -181,3 +181,27 @@ def test_red_flags_endpoint_clean(client):
     assert r.status_code == 200
     # deterministic clean posting -> no high/warn flags
     assert all(f["severity"] == "info" for f in r.json()["flags"])
+
+
+def test_job_description_includes_fit_when_predictor_on(client):
+    with patch("src.api.job_search.fetch_job_description",
+               new=AsyncMock(return_value="AI Engineer building RAG pipelines in PyTorch")), \
+         patch("src.api.job_search._fit_pct", new=AsyncMock(return_value=42)):
+        r = client.post("/job/description", json={
+            "platform": "linkedin", "external_id": "1", "title": "AI Engineer",
+            "resume_markdown": _CV})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["has_description"] is True
+    assert body["fit"] == 42
+
+
+def test_job_description_fit_none_when_predictor_off(client):
+    with patch("src.api.job_search.fetch_job_description",
+               new=AsyncMock(return_value="AI Engineer RAG PyTorch")), \
+         patch("src.api.job_search._fit_pct", new=AsyncMock(return_value=None)):
+        r = client.post("/job/description", json={
+            "platform": "linkedin", "external_id": "1", "title": "AI Engineer",
+            "resume_markdown": _CV})
+    assert r.status_code == 200, r.text
+    assert r.json()["fit"] is None

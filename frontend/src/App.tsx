@@ -7,10 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
 import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
 import { ResumeEditor } from '@/components/ResumeEditor'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
+
+// Stable per-job key for the pending/enrichment set.
+const jobKey = (j: { platform: string; external_id: string }) => `${j.platform}:${j.external_id}`
 
 const CV_KEY = 'overlap.cv'
 const SEARCH_KEY = 'overlap.search'
@@ -89,15 +93,6 @@ function FitBadge({ fit, allFits }: { fit?: number; allFits: number[] }) {
   )
 }
 
-function Spinner({ label, className = '' }: { label?: string; className?: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-xs text-muted-foreground ${className}`}>
-      <span className="inline-block size-3 shrink-0 rounded-full border-2 border-muted border-t-primary animate-spin" aria-hidden />
-      {label}
-    </span>
-  )
-}
-
 function JobMeta({ job, size = 'sm' }: { job: Job; size?: 'sm' | 'lg' }) {
   return (
     <div className={size === 'lg' ? 'space-y-1' : 'space-y-0.5'}>
@@ -135,7 +130,8 @@ function Home() {
   const [interpreted, setInterpreted] = useState<Record<string, any> | null>(saved.interpreted ?? null)
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
   const [searching, setSearching] = useState(false)
-  const [enriching, setEnriching] = useState(0)   // # of cards still backfilling keywords
+  // Job keys still backfilling their description/keywords/fit — drives per-card skeletons.
+  const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [insights, setInsights] = useState<Insights | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const searchAbort = useRef<AbortController | null>(null)
@@ -228,15 +224,22 @@ function Home() {
     enrichAbort.current?.abort()
     const ac = new AbortController()
     enrichAbort.current = ac
-    setEnriching(need.length)
     try {
       await api.enrichStream(
         { jobs: need, resume_markdown: cv || undefined },
-        { onUpdate: (u) => { patchJob(u); setEnriching((n) => Math.max(0, n - 1)) }, onDone: () => {} },
+        {
+          onUpdate: (u) => {
+            patchJob(u)
+            // This card is done backfilling — drop its skeleton.
+            setPending((prev) => { const n = new Set(prev); n.delete(jobKey(u)); return n })
+          },
+          onDone: () => {},
+        },
         ac.signal,
       )
     } catch { /* partial keywords are fine — some LinkedIn jobs stay walled */ }
-    finally { if (enrichAbort.current === ac) { enrichAbort.current = null; setEnriching(0) } }
+    // Clear any remaining skeletons (walled jobs that never returned a description).
+    finally { if (enrichAbort.current === ac) { enrichAbort.current = null; setPending(new Set()) } }
   }
 
   function resetResult() { setResult(null); setEditedResume(''); setCoverLetter(null) }
@@ -256,7 +259,7 @@ function Home() {
     enrichAbort.current?.abort()          // and its background keyword backfill
     const ac = new AbortController()
     searchAbort.current = ac
-    setSearching(true); setEnriching(0); setJobs([]); setInterpreted(null); setInsights(null)
+    setSearching(true); setPending(new Set()); setJobs([]); setInterpreted(null); setInsights(null)
     const collected: Job[] = []
     try {
       await api.searchStream(
@@ -265,6 +268,9 @@ function Home() {
           onInterpreted: (d) => setInterpreted(d),
           onJob: (j) => {
             collected.push(j)
+            // Cards without a description yet (LinkedIn/JobStreet) show a skeleton
+            // until the background enrichment fills in their keywords + fit.
+            if (!j.has_description) setPending((prev) => new Set(prev).add(jobKey(j)))
             setJobs((prev) => {
               const next = [...prev, j]
               return cv ? next.sort((a, b) => (b.fit ?? b.relevance ?? 0) - (a.fit ?? a.relevance ?? 0)) : next
@@ -303,18 +309,19 @@ function Home() {
       try {
         const d = await api.jobDescription({
           platform: job.platform, external_id: job.external_id, url: job.url,
-          resume_markdown: cv || undefined,
+          title: job.title, resume_markdown: cv || undefined,
         })
         if (d.has_description) {
           // patchJob updates BOTH the drawer and the underlying listing card.
           patchJob({
             platform: job.platform, external_id: job.external_id,
             description: d.description, has_description: true,
-            matched_skills: d.matched_skills, missing_skills: d.missing_skills, relevance: d.relevance,
+            matched_skills: d.matched_skills, missing_skills: d.missing_skills,
+            relevance: d.relevance, ...(d.fit != null ? { fit: d.fit } : {}),
           })
         }
       } catch { /* leave description empty — the drawer shows the no-description affordance */ }
-      finally { setDescLoading(false) }
+      finally { setDescLoading(false); setPending((prev) => { const n = new Set(prev); n.delete(jobKey(job)); return n }) }
     }
   }
 
@@ -480,9 +487,9 @@ function Home() {
                     ▸ scraping MyCareersFuture · LinkedIn · JobStreet — {jobs.length} found so far…
                   </p>
                 )}
-                {!searching && enriching > 0 && (
+                {!searching && pending.size > 0 && (
                   <p className="font-mono text-xs text-muted-foreground animate-pulse">
-                    ▸ loading keywords for {enriching} more {enriching === 1 ? 'job' : 'jobs'}…
+                    ▸ loading keywords for {pending.size} more {pending.size === 1 ? 'job' : 'jobs'}…
                   </p>
                 )}
 
@@ -491,6 +498,7 @@ function Home() {
                     const have = job.matched_skills ?? []
                     const missing = job.missing_skills ?? []
                     const total = have.length + missing.length
+                    const isPending = pending.has(jobKey(job))
                     return (
                       <button key={`${job.platform}-${job.external_id}`} onClick={() => openJob(job)}
                         className="w-full text-left rounded-lg border bg-card p-4 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -500,21 +508,26 @@ function Home() {
                             <div className="mt-1.5"><JobMeta job={job} /></div>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
-                            <FitBadge fit={job.fit} allFits={allFits} />
+                            {isPending ? <Skeleton className="h-4 w-16" />
+                              : job.fit != null ? <FitBadge fit={job.fit} allFits={allFits} />
+                              : <span className="eyebrow text-muted-foreground">unrated</span>}
                             {total > 0 && <Coverage have={have.length} total={total} />}
                             <span className="eyebrow">open →</span>
                           </div>
                         </div>
-                        {total > 0 ? (
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <Tokens have={have} missing={missing} />
-                            {!job.has_description && enriching > 0 && <Spinner label="more…" />}
-                          </div>
-                        ) : enriching > 0 ? (
-                          <Spinner label="extracting keywords…" className="mt-2" />
-                        ) : (
-                          <p className="mt-2 text-xs text-muted-foreground">No description found — open to view the posting.</p>
-                        )}
+                        <div className="mt-3">
+                          {isPending ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              <Skeleton className="h-5 w-16 rounded-full" />
+                              <Skeleton className="h-5 w-24 rounded-full" />
+                              <Skeleton className="h-5 w-14 rounded-full" />
+                            </div>
+                          ) : total > 0 ? (
+                            <div className="flex flex-wrap items-center gap-2"><Tokens have={have} missing={missing} /></div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No description found. Open to view the posting.</p>
+                          )}
+                        </div>
                       </button>
                     )
                   })}
