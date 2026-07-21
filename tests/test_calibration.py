@@ -19,3 +19,14 @@ def test_fit_then_apply_is_monotonic_and_stretches():
 def test_apply_clips_out_of_range():
     calib = fit_calibration([0.2, 0.8], [0.0, 1.0])
     assert 0.0 <= apply_calibration(2.0, calib) <= 1.0
+
+
+def test_display_stretch_maps_percentile_band_to_full_range():
+    from src.match_predictor_calibration import apply_calibration, fit_display_stretch
+    raw = [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55]  # compressed into [0.2, 0.55]
+    calib = fit_display_stretch(raw, lo_pct=5, hi_pct=95)
+    lo, hi = apply_calibration(0.21, calib), apply_calibration(0.54, calib)
+    assert 0.0 <= lo < hi <= 1.0        # monotonic within [0,1]
+    assert hi > 0.8                       # a top-of-range score reads high
+    assert lo < 0.2                       # a bottom-of-range score reads low
+    assert apply_calibration(0.9, calib) <= 0.95 and apply_calibration(0.0, calib) >= 0.0  # clipped

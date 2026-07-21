@@ -22,6 +22,26 @@ def fit_calibration(raw: list[float], targets: list[float]) -> dict:
     return {"type": "isotonic", "x": xs, "y": ys}
 
 
+def _percentile(sorted_vals: list[float], pct: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    k = (len(sorted_vals) - 1) * pct / 100.0
+    lo = int(k)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (k - lo)
+
+
+def fit_display_stretch(raw: list[float], lo_pct: float = 5.0, hi_pct: float = 95.0) -> dict:
+    """Percentile min-max stretch: map the raw score's [lo_pct, hi_pct] percentile
+    band onto [0.05, 0.95], so a compressed score range reads across the full 0-100
+    display. Honest as a RELATIVE fit score (rank on the scale), not a probability."""
+    s = sorted(float(x) for x in raw)
+    lo, hi = _percentile(s, lo_pct), _percentile(s, hi_pct)
+    if hi <= lo:
+        hi = lo + 1e-6
+    return {"type": "stretch", "x": [lo, hi], "y": [0.05, 0.95]}
+
+
 def apply_calibration(prob: float, calib: dict | None) -> float:
     """Map a raw prob through the calibration knots (linear interp), clip to [0,1].
     Identity when calib is None."""
