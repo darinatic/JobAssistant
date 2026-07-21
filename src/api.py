@@ -23,6 +23,7 @@ from src.agents.schemas import ParsedJobDescription, SkillMatch
 from src.logging_setup import configure_logging
 from src.matching import extract_skills, gap_analysis, lint_resume
 from src.rate_limit import RateLimitMiddleware
+from src.search_nlp import SearchFilters
 from src.utils.config import settings
 
 configure_logging(settings.log_level)
@@ -87,6 +88,7 @@ class ResumeParseResponse(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(min_length=2, description="Natural language, e.g. '50 remote AI Engineer jobs on JobStreet this week'")
     resume_markdown: Optional[str] = Field(default=None, description="If given, jobs are ranked by CV relevance")
+    filters: Optional[SearchFilters] = Field(default=None, description="Explicit UI dropdown filters; when present the LLM parse is skipped")
 
 
 class SearchResponse(BaseModel):
@@ -285,9 +287,9 @@ async def resume_parse(file: UploadFile = File(...)) -> ResumeParseResponse:
 async def search(req: SearchRequest) -> SearchResponse:
     """Natural-language multi-platform job scrape. The query is parsed into filters
     (Haiku), then scraped live. Stateless — results are returned, not saved."""
-    from src.search_nlp import parse_search_query
+    from src.search_nlp import build_query, parse_search_query
 
-    q = await parse_search_query(req.query)
+    q = build_query(req.filters, req.query) if req.filters is not None else await parse_search_query(req.query)
     jobs = await job_search.search_jobs(
         keyword=q.keyword,
         location=q.location,
@@ -307,9 +309,9 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
     line per result as it's scraped, then `done`. Lets the UI render incrementally."""
     import json
 
-    from src.search_nlp import parse_search_query
+    from src.search_nlp import build_query, parse_search_query
 
-    q = await parse_search_query(req.query)
+    q = build_query(req.filters, req.query) if req.filters is not None else await parse_search_query(req.query)
 
     async def gen():
         yield json.dumps({"type": "interpreted", "data": q.model_dump()}) + "\n"

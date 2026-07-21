@@ -77,6 +77,24 @@ class SearchQuery(BaseModel):
         object.__setattr__(self, "remote_options", [r for r in self.remote_options if r in _REMOTE])
 
 
+class SearchFilters(SearchQuery):
+    """Explicit filters coming straight from the UI dropdowns. Same fields and
+    validators as SearchQuery, but `keyword` is optional (the raw search box text
+    is used as a fallback). When a request carries these, the endpoints skip the
+    Haiku parse entirely — a fully deterministic, no-LLM search path."""
+
+    keyword: str = ""
+
+
+def build_query(filters: SearchFilters, fallback_query: str) -> SearchQuery:
+    """Turn explicit UI filters into a SearchQuery with no LLM call. `keyword`
+    falls back to the raw search box text when the filters don't carry one."""
+    data = filters.model_dump()
+    if not data.get("keyword"):
+        data["keyword"] = fallback_query.strip()[:100] or "jobs"
+    return SearchQuery(**data)
+
+
 _SYSTEM = (
     "Extract structured job-search filters from the user's request. Set only the fields "
     "the user actually specifies; leave the rest at their defaults. `keyword` is the role "
