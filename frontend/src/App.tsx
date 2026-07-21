@@ -517,7 +517,7 @@ function Home() {
                     </div>
                     <div className="space-y-2">
                       <p className="eyebrow">most in-demand skills</p>
-                      {insights.demanded_skills.slice(0, 10).map((d) => (
+                      {insights.demanded_skills.slice(0, 20).map((d) => (
                         <div key={d.skill} className="flex items-center gap-3">
                           <span className="w-36 shrink-0 truncate font-mono text-xs">{d.skill}</span>
                           <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">

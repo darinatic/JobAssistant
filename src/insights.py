@@ -11,7 +11,7 @@ from collections import Counter
 from src.matching import extract_skills, rough_relevance
 
 
-def aggregate_jobs(jobs: list[dict], master_cv: str | None = None, top_n: int = 15) -> dict:
+def aggregate_jobs(jobs: list[dict], master_cv: str | None = None, top_n: int = 20) -> dict:
     n = len(jobs)
     cv_skills = extract_skills(master_cv) if master_cv else set()
 

@@ -235,7 +235,10 @@ over in substance exactly as the master CV states them.
 
 ### Skills Section
 - Reorder skills to match JD priority (most relevant first)
-- Group skills that match JD categories together
+- Present skills as a compact plain list (comma-separated, or the CV's existing
+  grouping if it already has one). Do NOT invent category headers like
+  "Languages:" / "Frameworks:" / "Tools:" — a flat list matches real resumes and
+  saves vertical space.
 - Keep all skills but emphasize matches
 
 ### Experience Section
@@ -245,9 +248,13 @@ over in substance exactly as the master CV states them.
 - Emphasize transferable experiences that match JD requirements
 
 ### Summary Section
-- Adjust emphasis to highlight most relevant aspects for this role
-- Incorporate 2-3 key terms from JD naturally
-- Keep it concise (2-3 sentences)
+- Write it like a human, not an AI keyword dump. LEAD with the single most relevant
+  thing about this candidate for this role, so a recruiter is sold in the first
+  sentence or two.
+- Keep it to 2-3 tight sentences. Do NOT cram every skill in — leave the rest for the
+  Skills and Experience sections.
+- Plain, confident, specific. No buzzword stacking, no "results-driven professional"
+  filler, no rattling off five technologies in one breath.
 - The summary must not claim an industry or domain the CV doesn't establish
 - The summary must not assign the candidate a job title the CV doesn't establish
 

@@ -190,7 +190,7 @@ class ResumeTailorAgent:
    `github.com/x` — DROP the `https://`); `## ` for each section heading; `### `
    for each role/project title. Write EVERY experience and project achievement as
    its own bullet starting with `- ` (never as a plain paragraph). Use `**bold**`
-   for the skill-group labels and company/date lines.
+   for company/date lines.
 3. **Honesty (hard rule)**: only use skills, tools, and experience that appear in
    the candidate's CV above. NEVER add any skill from the "Skills NOT in the
    candidate's CV" list, and never invent domains, metrics, methods, or titles.
@@ -199,8 +199,15 @@ class ResumeTailorAgent:
    over synonyms. Spell out then abbreviate on first use, e.g. "Machine Learning
    (ML)", so both the full term and the acronym match.
 4. Reorder the skills section and experience bullets to lead with matched skills.
+   Keep **Skills** as a compact plain list — comma-separated, or the CV's own
+   grouping if it already has one. Do NOT invent category headers like "Languages:"
+   / "Frameworks:" / "Tools:": a flat list matches real resumes and saves space.
 5. Incorporate keywords naturally (don't keyword-stuff).
-6. Adjust the summary to emphasize relevant real experience.
+6. **Summary — write like a person, not a keyword dump.** 2-3 tight sentences that
+   LEAD with the single most relevant thing about this candidate for THIS role, so a
+   recruiter is sold in the first sentence or two. Don't cram every skill in — leave
+   the rest for the Skills and Experience sections. Plain, confident, specific;
+   no buzzword stacking or generic "results-driven professional" filler.
 {length_rule}
 8. Output the complete markdown resume, then list changes made and keywords incorporated."""
 
