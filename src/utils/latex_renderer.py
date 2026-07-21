@@ -4,8 +4,8 @@ The tailored resume is markdown (the editor + honesty linter operate on it). Thi
 module is the *render* layer: it maps that markdown onto a deliberately ATS-safe
 LaTeX template and compiles it with Tectonic.
 
-ATS safety is the whole point of the template choices below: single column, standard
-Latin Modern font with a proper T1/ToUnicode map (so PDF text extracts cleanly), plain
+ATS safety is the whole point of the template choices below: single column, a clean
+sans-serif Roboto font with a proper T1/ToUnicode map (so PDF text extracts cleanly), plain
 ``\\section`` headings, no tables / multicol / floats / graphics, and links rendered as
 visible text. Fancy LaTeX (multi-column, micro-typography, custom glyphs) is exactly what
 silently breaks resume parsers, so it is intentionally absent.
@@ -37,7 +37,7 @@ class LatexCompileError(RuntimeError):
 _RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{lmodern}
+\usepackage[default]{roboto}
 \usepackage[a4paper,margin=0.6in]{geometry}
 \usepackage[hidelinks]{hyperref}
 \usepackage{enumitem}
@@ -52,7 +52,7 @@ _RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
 
 % Plain bold section headings with a full-width rule underneath. No color, no
 % custom fonts — parsers read these as ordinary headings.
-\titleformat{\section}{\large\bfseries\scshape}{}{0em}{}[\titlerule]
+\titleformat{\section}{\large\bfseries}{}{0em}{\MakeUppercase}[\titlerule]
 \titlespacing*{\section}{0pt}{10pt}{4pt}
 
 \begin{document}
@@ -63,7 +63,7 @@ _RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
 _COVER_PREAMBLE = r"""\documentclass[11pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{lmodern}
+\usepackage[default]{roboto}
 \usepackage[a4paper,margin=1in]{geometry}
 \usepackage{parskip}
 \pagestyle{empty}

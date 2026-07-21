@@ -115,7 +115,7 @@ flowchart LR
     OUT --> PDF["Tectonic -> ATS-safe single-column PDF"]
 ```
 
-The tailored resume (and the uploaded CV) are edited in a **WYSIWYG editor** — rich-text on the surface, markdown as the source of truth — with a **side-by-side live preview** that approximates the final layout and shows the one-page badge as you type. A **Fit to page** action re-tailors to the nearest full page when content spills a small remainder onto an under-used extra page. The PDF renders from your edits via an ATS-safe single-column LaTeX template (Latin Modern, T1/ToUnicode so text extracts cleanly, plain `\section`, no tables/multicol/floats) compiled by **Tectonic**. Output is never stored.
+The tailored resume (and the uploaded CV) are edited in a **WYSIWYG editor** — rich-text on the surface, markdown as the source of truth — with a **side-by-side live preview** that approximates the final layout and shows the one-page badge as you type. A **Fit to page** action re-tailors to the nearest full page when content spills a small remainder onto an under-used extra page. The PDF renders from your edits via an ATS-safe single-column LaTeX template (Roboto, T1/ToUnicode so text extracts cleanly, plain `\section`, no tables/multicol/floats) compiled by **Tectonic**. Output is never stored.
 
 ### 2. Live job search
 

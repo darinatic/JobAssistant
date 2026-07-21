@@ -129,6 +129,24 @@ def test_name_without_contact_is_not_polluted_by_section():
     assert "Experience" not in _header(out)  # section not absorbed as contact
 
 
+def test_resume_uses_sans_serif_font():
+    tex = markdown_to_latex(_SAMPLE_MD)
+    # Modern sans-serif default, not the old Latin Modern serif.
+    assert "roboto" in tex
+    assert r"\usepackage{lmodern}" not in tex
+    # ATS encoding preserved.
+    assert r"\usepackage[T1]{fontenc}" in tex
+    # Clean-extraction heading: real uppercase, not fake small-caps (which corrupt the text layer).
+    assert r"\scshape" not in tex
+    assert r"\MakeUppercase" in tex
+
+
+def test_cover_letter_uses_sans_serif_font():
+    tex = cover_letter_to_latex("Dear Hiring Manager,\n\nI am writing to apply.")
+    assert "roboto" in tex
+    assert r"\usepackage{lmodern}" not in tex
+
+
 @pytest.mark.skipif(not _HAS_TECTONIC, reason="Tectonic not installed")
 def test_end_to_end_compile_produces_pdf():
     tex = markdown_to_latex(_SAMPLE_MD)

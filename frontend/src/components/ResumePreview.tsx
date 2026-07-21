@@ -31,7 +31,7 @@ function inline(text: string, keyBase: string): ReactNode[] {
 export function ResumePreview({ md }: { md: string }) {
   const blocks = parseResume(md)
   return (
-    <div className="resume-preview overflow-auto rounded-md bg-white p-6 font-serif text-[11px] leading-snug text-black shadow-inner">
+    <div className="resume-preview overflow-auto rounded-md bg-white p-6 font-sans text-[11px] leading-snug text-black shadow-inner">
       {blocks.map((b, i) => {
         switch (b.kind) {
           case 'name':
