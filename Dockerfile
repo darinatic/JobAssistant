@@ -28,10 +28,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh \
     && mv tectonic /usr/local/bin/tectonic
 
-# Python deps (this also installs the `src` package's requirements)
+# Python deps (this also installs the `src` package's requirements).
+# `[predictor]` adds onnxruntime + tokenizers for the learned resume<->JD fit model.
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-RUN pip install .
+RUN pip install ".[predictor]"
 
 # Patchright Chromium + its OS deps — the in-container fallback for the JobStreet
 # scraper (production normally routes it through Browserbase via BROWSERBASE_SCRAPERS).

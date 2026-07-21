@@ -1,13 +1,13 @@
 # Render Blueprint. Deploy via https://dashboard.render.com/blueprints (New → Blueprint,
 # pick this repo) or connect the repo as a Web Service and it auto-detects the Dockerfile.
-# See DEPLOY.md. Render auto-deploys on every push to the connected branch — no CI token.
+# Render auto-deploys on every push to the connected branch — no CI token.
 services:
   - type: web
     name: overlap
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: singapore
-    plan: free                 # free = 512MB / spins down when idle; bump to keep warm
+    plan: standard             # 2GB RAM / 1 CPU, always-on — headroom for the fit predictor
     healthCheckPath: /health
     envVars:
       # Route the JobStreet scraper through Browserbase so it survives Render's IP.
@@ -17,6 +17,12 @@ services:
         value: "true"
       - key: LOG_LEVEL
         value: INFO
+      # Learned resume<->JD fit predictor — ranks search results by fit. Turns the
+      # feature on; the model is pulled from a HuggingFace repo (set MATCH_PREDICTOR_REPO
+      # + HF_TOKEN in the dashboard). If the artifact can't load, it degrades gracefully
+      # to lexical relevance — no breakage.
+      - key: MATCH_PREDICTOR_MODEL
+        value: v1
       # Secrets — set these in the Render dashboard (Blueprint prompts on first deploy).
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -24,3 +30,7 @@ services:
         sync: false
       - key: BROWSERBASE_PROJECT_ID
         sync: false
+      - key: MATCH_PREDICTOR_REPO
+        sync: false            # your HuggingFace repo id, e.g. you/resume-fit-onnx
+      - key: HF_TOKEN
+        sync: false            # only needed if the HF repo is private
