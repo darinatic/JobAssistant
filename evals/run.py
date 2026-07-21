@@ -3,9 +3,10 @@
     python -m evals.run --version v3 --style faithful      # eval one version
     python -m evals.run --compare v3 v4 --style faithful    # diff two saved runs
 
-Deterministic graders only (honesty, coverage, one-page fit, structure) — no LLM judge,
-no tracker. Real Sonnet calls per case, so it costs tokens; runs at temperature 0.
-Results are saved to evals/results/<version>_<style>.json for later comparison.
+Deterministic graders only (honesty, coverage, one-page fit, structure) — no LLM judge.
+Real Sonnet calls per case, so it costs tokens; runs at temperature 0. Results are saved
+to evals/results/<version>_<style>.json for later comparison, and (when LANGSMITH_API_KEY
+is set) logged to LangSmith project 'resumeagent-evals' for tracking across runs.
 """
 
 from __future__ import annotations
@@ -15,6 +16,10 @@ import asyncio
 import json
 import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 _RESULTS = Path(__file__).parent / "results"
 
@@ -74,19 +79,30 @@ async def _run(version: str, style: str, use_judge: bool = False) -> dict:
     path = _RESULTS / f"{version}_{style}.json"
     path.write_text(json.dumps(out, indent=2))
     print(f"\n=== {version} / {style} ===\n{_fmt_summary(summary)}\n  saved -> {path}")
-    _log_mlflow(out)
+    _log_langsmith(out)
     return out
 
 
-def _log_mlflow(out: dict) -> None:
-    """Track the run in MLflow (local ./mlruns file store — no server). Optional:
-    `pip install -e '.[eval]'`; view with `mlflow ui`. Also serves the fit-predictor
-    evals later — one experiment tracker for both."""
-    try:
-        import mlflow
-    except ImportError:
-        print("  (mlflow not installed — skipping tracking; `pip install -e \".[eval]\"`)")
+_LANGSMITH_PROJECT = "resumeagent-evals"
+
+
+def _log_langsmith(out: dict) -> None:
+    """Track the run in LangSmith (project 'resumeagent-evals' — shared with the
+    fit-predictor evals, see scripts/eval_match_predictor.py). Optional:
+    `pip install -e '.[eval]'` + LANGSMITH_API_KEY set (e.g. in .env). Best-effort:
+    any failure is a warning, never fatal — the local JSON above is already saved."""
+    if not os.environ.get("LANGSMITH_API_KEY"):
+        print("  (LANGSMITH_API_KEY not set — skipping LangSmith tracking)")
         return
+    try:
+        import datetime
+        from uuid import uuid4
+
+        from langsmith import Client
+    except ImportError:
+        print("  (langsmith not installed — skipping tracking; `pip install -e \".[eval]\"`)")
+        return
+
     from src.prompts import get_prompt
     from src.utils.config import settings
 
@@ -95,16 +111,30 @@ def _log_mlflow(out: dict) -> None:
         sha = get_prompt("resume_tailor", version=version).sha256
     except Exception:
         sha = "unknown"
-    mlflow.set_experiment("resume_tailor_prompts")
-    with mlflow.start_run(run_name=f"{version}_{style}"):
-        mlflow.log_params({
-            "prompt": "resume_tailor", "version": version, "style": style,
-            "model": settings.anthropic_sonnet_model, "prompt_sha": sha,
-            "n_cases": summary["cases"],
-        })
-        mlflow.log_metrics({k: v for k, v in summary.items() if isinstance(v, (int, float))})
-        mlflow.log_dict(out, "results.json")
-    print("  logged to MLflow (experiment 'resume_tailor_prompts')")
+
+    params = {
+        "prompt": "resume_tailor", "version": version, "style": style,
+        "model": settings.anthropic_sonnet_model, "prompt_sha": sha,
+        "n_cases": summary["cases"],
+    }
+    metrics = {k: v for k, v in summary.items() if isinstance(v, (int, float))}
+
+    try:
+        client = Client()
+        now = datetime.datetime.now(datetime.timezone.utc)
+        client.create_run(
+            id=uuid4(),
+            project_name=_LANGSMITH_PROJECT,
+            name=f"resume_tailor_{version}_{style}",
+            run_type="chain",
+            inputs=params,
+            outputs={**metrics, "results": out},
+            start_time=now,
+            end_time=now,
+        )
+        print(f"  logged to LangSmith (project '{_LANGSMITH_PROJECT}')")
+    except Exception as e:  # never let tracking failure break an eval run
+        print(f"  (LangSmith logging failed, continuing: {e})")
 
 
 def _compare(v_a: str, v_b: str, style: str) -> None:

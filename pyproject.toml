@@ -71,12 +71,12 @@ dev = [
     "pre-commit>=3.8.0",
 ]
 
-# Prompt / model evaluation — dev-only experiment tracking (MLflow, local file store).
-# Never installed in prod: `pip install -e ".[eval]"`. Used by evals/run.py.
+# Prompt / model evaluation — dev-only experiment tracking (LangSmith, project
+# 'resumeagent-evals'). Never installed in prod: `pip install -e ".[eval]"`.
+# Used by evals/run.py and scripts/eval_match_predictor.py.
 eval = [
-    "mlflow>=2.14.0",
     "openai>=1.40.0",   # LLM-as-judge (evals/judge.py)
-    "langsmith>=0.1.100",  # scripts/eval_match_predictor.py Dataset + Experiment logging
+    "langsmith>=0.1.100",  # evals/run.py + scripts/eval_match_predictor.py tracking
 ]
 
 # Optional LangSmith observability — LLM tracing + Hub prompt versioning. langsmith
