@@ -268,10 +268,14 @@ function Home() {
         {
           onInterpreted: (d) => setInterpreted(d),
           onJob: (j) => {
+            // A platform can return the same posting twice; skip duplicates so the
+            // list keys stay unique and a job isn't double-counted.
+            const k = jobKey(j)
+            if (collected.some((c) => jobKey(c) === k)) return
             collected.push(j)
             // Cards without a description yet (LinkedIn/JobStreet) show a skeleton
             // until the background enrichment fills in their keywords + fit.
-            if (!j.has_description) setPending((prev) => new Set(prev).add(jobKey(j)))
+            if (!j.has_description) setPending((prev) => new Set(prev).add(k))
             setJobs((prev) => {
               const next = [...prev, j]
               return cv ? next.sort((a, b) => (b.fit ?? b.relevance ?? 0) - (a.fit ?? a.relevance ?? 0)) : next
