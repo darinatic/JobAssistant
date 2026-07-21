@@ -23,7 +23,7 @@ export function ResumeWorkspace({ value, onChange, showPageBadge = false, label 
       <ResumeEditor value={value} onChange={onChange} showPageBadge={showPageBadge} />
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent className="flex h-[90vh] w-[95vw] max-w-6xl flex-col p-0">
+        <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-6xl flex-col p-0 sm:max-w-6xl">
           <DialogHeader className="border-b px-5 py-3">
             <DialogTitle className="eyebrow">edit {label}</DialogTitle>
           </DialogHeader>
