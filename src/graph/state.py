@@ -41,8 +41,8 @@ class ApplicationState:
     # app; falls back to the local master_cv.md file when omitted.
     master_cv: Optional[str] = None
 
-    # Tailoring style: faithful (keep all, reorder/rephrase) | balanced (condense +
-    # drop weak content, ~1 page) | aggressive (restructure + cut + hard 1 page).
+    # Tailoring style: faithful (keep all, reorder/rephrase) | aggressive
+    # (restructure + cut + hard 1 page).
     style: str = "faithful"
 
     # Optional explicit rendered-line budget for a "fit to page" re-tailor — when

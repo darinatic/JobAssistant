@@ -161,10 +161,10 @@ class MatchOut(BaseModel):
 class TailorRequest(BaseModel):
     jd_text: str = Field(min_length=20)
     resume_markdown: str = Field(min_length=20)
-    # Editorial latitude: faithful (keep all) | balanced (condense, ~1pg) | aggressive
-    # (restructure + cut, hard 1pg). Honesty rules are identical at every level.
-    style: Optional[Literal["faithful", "balanced", "aggressive"]] = None
-    concise: bool = False  # legacy flag; concise=True maps to 'balanced' when style is unset
+    # Editorial latitude: faithful (keep all, reorder/rephrase) | aggressive
+    # (restructure + cut, hard 1pg). Honesty rules are identical at both levels.
+    style: Optional[Literal["faithful", "aggressive"]] = None
+    concise: bool = False  # legacy flag; concise=True maps to 'aggressive' when style is unset
     include_cover_letter: bool = False  # cover letter is a separate button now
     # "Fit to page": when set, re-tailor with a hard rendered-line budget so a small
     # remainder doesn't waste an under-used trailing page. See page_budget.py.

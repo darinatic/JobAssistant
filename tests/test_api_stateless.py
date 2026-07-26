@@ -129,12 +129,12 @@ def test_tailor_style_passes_through(client):
     assert mock.call_args.kwargs["style"] == "aggressive"
 
 
-def test_tailor_legacy_concise_maps_to_balanced(client):
+def test_tailor_legacy_concise_maps_to_aggressive(client):
     mock = AsyncMock(return_value=_tailor_result())
     with patch("src.api.services.run_full_tailoring", new=mock):
         r = client.post("/tailor", json={"jd_text": _JD, "resume_markdown": _CV, "concise": True})
     assert r.status_code == 200, r.text
-    assert mock.call_args.kwargs["style"] == "balanced"
+    assert mock.call_args.kwargs["style"] == "aggressive"
 
 
 def test_tailor_target_pages_sets_line_budget(client):

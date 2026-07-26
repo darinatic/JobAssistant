@@ -15,7 +15,7 @@ from src.utils.config import settings
 # rules (no fabrication / domain / title / method invention) are invariant across
 # ALL styles and live in the system prompt; only the cut/reorder/rephrase freedom
 # below changes. Each entry is rule #7 of the human prompt.
-TAILOR_STYLES = ("faithful", "balanced", "aggressive")
+TAILOR_STYLES = ("faithful", "aggressive")
 
 _STYLE_RULES = {
     "faithful": (
@@ -23,12 +23,6 @@ _STYLE_RULES = {
         "bullets, and sections; do not drop or merge them. Retune the summary and "
         "the ordering of skills and bullets to lead with what matches the JD, and "
         "tighten wording where natural. Favor completeness over brevity."
-    ),
-    "balanced": (
-        "7. **Tighten toward one page.** Keep the overall structure, but condense "
-        "weak or verbose bullets and DROP clearly irrelevant bullets and stale, "
-        "unrelated roles. Lightly reorder sections by relevance. Aim for a focused "
-        "one-page resume. Never fabricate to fill space."
     ),
     "aggressive": (
         "7. **Maximize fit — restructure for this role, ONE PAGE HARD.** The result "
@@ -49,10 +43,11 @@ _STYLE_RULES = {
 
 def normalize_style(style: str | None, *, concise: bool = False) -> str:
     """Resolve the effective style. Falls back to the legacy ``concise`` flag
-    (concise=True → 'balanced') and finally to 'faithful'."""
+    (concise=True → 'aggressive', the closest surviving 'condense to one page'
+    intent) and finally to 'faithful'."""
     if style in TAILOR_STYLES:
         return style
-    return "balanced" if concise else "faithful"
+    return "aggressive" if concise else "faithful"
 
 
 def _budget_rule(target_line_budget: float) -> str:

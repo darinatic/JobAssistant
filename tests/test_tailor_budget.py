@@ -21,5 +21,5 @@ def test_budget_rule_keeps_honesty_guardrails():
 
 def test_normalize_style_unchanged():
     assert normalize_style("aggressive") == "aggressive"
-    assert normalize_style(None, concise=True) == "balanced"
+    assert normalize_style(None, concise=True) == "aggressive"
     assert normalize_style(None) == "faithful"
