@@ -204,7 +204,7 @@ export const api = {
   tailor: (body: {
     jd_text: string
     resume_markdown: string
-    style?: 'faithful' | 'balanced' | 'aggressive'
+    style?: 'faithful' | 'aggressive'
     include_cover_letter?: boolean
     target_pages?: number
   }) => postJson<TailorResult>('/tailor', body),

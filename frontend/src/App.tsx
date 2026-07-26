@@ -31,7 +31,6 @@ type ActiveJob = { job?: Job; jd: string }
 
 const STYLES = [
   { key: 'faithful' as const, hint: 'Keep everything, reorder and rephrase only. Safest.' },
-  { key: 'balanced' as const, hint: 'Condense weak content and drop the irrelevant. Aims for one page.' },
   { key: 'aggressive' as const, hint: 'Restructure, cut low-relevance sections, hard one page. Max fit.' },
 ]
 type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[]; filters?: FilterState; manualFilters?: boolean }
@@ -157,7 +156,7 @@ function Home() {
   const [descLoading, setDescLoading] = useState(false)
   const [redFlags, setRedFlags] = useState<RedFlag[] | null>(null)
   const [redFlagsFailed, setRedFlagsFailed] = useState(false)
-  const [style, setStyle] = useState<'faithful' | 'balanced' | 'aggressive'>('faithful')
+  const [style, setStyle] = useState<'faithful' | 'aggressive'>('faithful')
   const [result, setResult] = useState<TailorResult | null>(null)
   const [editedResume, setEditedResume] = useState('')
   const [coverLetter, setCoverLetter] = useState<string | null>(null)
@@ -360,7 +359,7 @@ function Home() {
   }
 
   // Open the tailoring workspace for a pasted JD WITHOUT auto-running the tailor.
-  // The drawer shows the style picker so the user chooses faithful/balanced/aggressive
+  // The drawer shows the style picker so the user chooses faithful/aggressive
   // before tailoring (same as the search-job flow), instead of silently defaulting.
   function openPasteJd() {
     if (!cv) return toast.error('Upload your resume first.')
@@ -721,7 +720,7 @@ function Home() {
               <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
                 <div>
                   <p className="eyebrow mb-2">tailoring style</p>
-                  <div className="grid grid-cols-3 gap-1 rounded-lg border bg-background p-1">
+                  <div className="grid grid-cols-2 gap-1 rounded-lg border bg-background p-1">
                     {STYLES.map((s) => (
                       <button key={s.key} onClick={() => setStyle(s.key)}
                         className={`rounded-md px-2 py-1.5 text-xs font-medium capitalize transition-colors ${
