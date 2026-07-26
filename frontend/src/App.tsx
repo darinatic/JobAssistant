@@ -165,6 +165,7 @@ function Home() {
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [insights, setInsights] = useState<Insights | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [downloading, setDownloading] = useState<'resume' | 'cover' | null>(null)
   const searchAbort = useRef<AbortController | null>(null)
   const enrichAbort = useRef<AbortController | null>(null)
 
@@ -274,6 +275,11 @@ function Home() {
   }
 
   function resetResult() { setResult(null); setEditedResume(''); setCoverLetter(null) }
+
+  function clearResults() {
+    setJobs([]); setInsights(null); setPending(new Set()); setInterpreted(null)
+    try { localStorage.removeItem(SEARCH_KEY) } catch { /* ignore */ }
+  }
 
   async function onUpload(file: File) {
     setUploading(true)
@@ -457,8 +463,7 @@ function Home() {
       <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur">
         <div className="mx-auto max-w-3xl px-5 h-14 flex items-center justify-between">
           <div className="flex items-baseline gap-2.5">
-            <span className="display text-lg font-semibold">Overlap</span>
-            <span className="eyebrow hidden sm:inline">ATS-safe · no sign-up</span>
+            <span className="display text-lg font-semibold">Resume tailoring &amp; job search</span>
           </div>
           <ThemeToggle />
         </div>
@@ -466,9 +471,8 @@ function Home() {
 
       <main className="mx-auto max-w-3xl px-5 pb-24">
         <section className="pt-12 pb-9">
-          <p className="eyebrow mb-3">Deterministic · ATS-keyword matching</p>
           <h1 className="display text-[2rem] sm:text-[2.6rem] font-semibold leading-[1.06] max-w-2xl">
-            See where your CV and the job <span className="text-primary">overlap</span>, then tailor to it.
+            Tailor your resume to a job, and search listings across MyCareersFuture, LinkedIn, and JobStreet.
           </h1>
         </section>
 
@@ -503,7 +507,9 @@ function Home() {
             )}
           </section>
 
-          {/* Step 2, find a job */}
+          {/* Step 2, find a job — only shown once a resume is loaded, so every
+              job can be ranked against the CV. */}
+          {cv && (
           <section className="rounded-xl border bg-card p-5 sm:p-6">
             <StepHead n="02" title="Find a job, or paste one" />
             <Tabs defaultValue="search">
@@ -517,17 +523,13 @@ function Home() {
                   <Input value={query} onChange={(e) => { setQuery(e.target.value); setManualFilters(false) }}
                     onKeyDown={(e) => e.key === 'Enter' && onSearch()}
                     placeholder={'e.g. "50 remote AI Engineer jobs on JobStreet, this week"'} />
-                  <Button onClick={onSearch} disabled={searching || !cv}>{searching ? 'Searching…' : 'Search'}</Button>
+                  <Button onClick={onSearch} disabled={searching}>{searching ? 'Searching…' : 'Search'}</Button>
                 </div>
-                {!cv ? (
-                  <p className="text-xs text-muted-foreground">Upload your resume above to search, so each job can be ranked against it.</p>
-                ) : (
-                  <p className="eyebrow">
-                    searches <span style={{ color: 'var(--loc)' }}>MyCareersFuture</span> ·{' '}
-                    <span style={{ color: 'var(--loc)' }}>LinkedIn</span> ·{' '}
-                    <span style={{ color: 'var(--loc)' }}>JobStreet</span> in parallel, or name one in your query
-                  </p>
-                )}
+                <p className="eyebrow">
+                  searches <span style={{ color: 'var(--loc)' }}>MyCareersFuture</span> ·{' '}
+                  <span style={{ color: 'var(--loc)' }}>LinkedIn</span> ·{' '}
+                  <span style={{ color: 'var(--loc)' }}>JobStreet</span> in parallel, or name one in your query
+                </p>
 
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -591,6 +593,12 @@ function Home() {
                   </div>
                 )}
 
+                {jobs.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <p className="eyebrow">{jobs.length} result{jobs.length === 1 ? '' : 's'}</p>
+                    <button onClick={clearResults} className="eyebrow hover:text-foreground">clear results ✕</button>
+                  </div>
+                )}
                 {insights ? (
                   <div className="rounded-lg border bg-card p-5 space-y-5">
                     <p className="eyebrow">insights on these {insights.job_count} jobs</p>
@@ -669,10 +677,11 @@ function Home() {
               </TabsContent>
             </Tabs>
           </section>
+          )}
         </div>
 
         <footer className="mt-16 eyebrow">
-          Overlap, stateless · deterministic matcher · your CV never leaves the browser
+          A portfolio project by Jason Bobo Kyaw.
         </footer>
       </main>
 
@@ -843,8 +852,9 @@ function Home() {
                         )}
                         <Button size="sm" onClick={async () => {
                           if (!editedResume.trim()) return
-                          try { download(await api.resumePdf(editedResume), 'resume.pdf') } catch (e) { toast.error(err(e)) }
-                        }} disabled={!editedResume.trim()}>Download resume PDF</Button>
+                          setDownloading('resume')
+                          try { download(await api.resumePdf(editedResume), 'resume.pdf') } catch (e) { toast.error(err(e)) } finally { setDownloading(null) }
+                        }} disabled={!editedResume.trim() || downloading === 'resume'}>{downloading === 'resume' ? 'Preparing…' : 'Download resume PDF'}</Button>
                       </div>
                     </div>
                     <ResumeWorkspace value={editedResume} onChange={setEditedResume} showPageBadge label="tailored resume" />
@@ -857,8 +867,9 @@ function Home() {
                       </Button>
                       {coverLetter && (
                         <Button size="sm" variant="outline" onClick={async () => {
-                          try { download(await api.coverLetterPdf(coverLetter), 'cover-letter.pdf') } catch (e) { toast.error(err(e)) }
-                        }}>Download cover letter PDF</Button>
+                          setDownloading('cover')
+                          try { download(await api.coverLetterPdf(coverLetter), 'cover-letter.pdf') } catch (e) { toast.error(err(e)) } finally { setDownloading(null) }
+                        }} disabled={downloading === 'cover'}>{downloading === 'cover' ? 'Preparing…' : 'Download cover letter PDF'}</Button>
                       )}
                     </div>
                     {coverLetter && (
