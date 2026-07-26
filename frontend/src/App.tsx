@@ -11,6 +11,7 @@ import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
+import { patchSkillsLine, skillInResume } from '@/lib/skills'
 import {
   DATE_OPTIONS, EXPERIENCE_OPTIONS, PLATFORM_OPTIONS, REMOTE_OPTIONS, MAX_JOBS_OPTIONS,
   DEFAULT_FILTERS, filtersFromInterpreted, toRequestFilters, type FilterState,
@@ -74,6 +75,26 @@ function Tokens({ have = [], gap = [], missing = [], honesty = [] }: { have?: st
       {honesty.map((s) => <span key={s} className="tok tok-honesty">{s}</span>)}
       {missing.map((s) => <span key={s} className="tok">{s}</span>)}
     </div>
+  )
+}
+
+// A toggleable skill chip. `added` reflects presence in the current resume.
+// green = surfaceable (you have it), amber = genuine gap (not in your CV).
+function SkillChip({ skill, tone, added, onToggle }: {
+  skill: string; tone: 'have' | 'gap'; added: boolean; onToggle: () => void
+}) {
+  const color = tone === 'have' ? 'var(--have)' : 'var(--honesty)'
+  return (
+    <button
+      onClick={onToggle}
+      className="tok"
+      style={added
+        ? { color, borderColor: `color-mix(in oklab, ${color} 45%, transparent)`, background: `color-mix(in oklab, ${color} 10%, transparent)` }
+        : { opacity: 0.45 }}
+      title={added ? 'Click to remove' : 'Click to add'}
+    >
+      {skill} {added ? '×' : '+'}
+    </button>
   )
 }
 
@@ -368,6 +389,14 @@ function Home() {
     setActiveJob({ jd })
   }
 
+  // Auto-add every JD skill the tailor left off: surfaceable (owned, honest) and
+  // genuine gaps (not in the CV). The user prunes what they can't defend.
+  function applySkillAdditions(md: string, match: { surfaceable_skills: string[]; genuine_gaps: string[] }): string {
+    let out = md
+    for (const s of [...match.surfaceable_skills, ...match.genuine_gaps]) out = patchSkillsLine(out, s, 'add')
+    return out
+  }
+
   async function runTailor(jdText: string) {
     if (!cv) return toast.error('Upload your resume first.')
     if (jdText.trim().length < 20) return toast.error('This posting has no description to tailor against.')
@@ -375,7 +404,7 @@ function Home() {
     try {
       const res = await api.tailor({ jd_text: jdText, resume_markdown: cv, style })
       setResult(res)
-      setEditedResume(res.tailored_resume_markdown ?? '')
+      setEditedResume(applySkillAdditions(res.tailored_resume_markdown ?? '', res.match))
       setCoverLetter(null)
     } catch (e) { toast.error(err(e)) } finally { setTailoring(false) }
   }
@@ -392,7 +421,7 @@ function Home() {
         jd_text: activeJob.jd, resume_markdown: editedResume, style, target_pages: t.targetPages,
       })
       setResult(res)
-      setEditedResume(res.tailored_resume_markdown ?? editedResume)
+      setEditedResume(applySkillAdditions(res.tailored_resume_markdown ?? editedResume, res.match))
       setCoverLetter(null)
     } catch (e) { toast.error(err(e)) } finally { setFitting(false) }
   }
@@ -734,7 +763,7 @@ function Home() {
                   {tailoring ? 'Tailoring…' : descLoading ? 'Loading job…' : result ? 'Re-tailor' : 'Tailor my resume'}
                 </Button>
                 {tailoring && <p className="font-mono text-xs text-muted-foreground animate-pulse">▸ {stage}</p>}
-                <p className="text-xs text-muted-foreground">Every style keeps you honest, no skill, title, or metric that isn’t in your CV.</p>
+                <p className="text-xs text-muted-foreground">The tailor never invents history. Missing JD skills are added to your Skills list only, and flagged so you can remove what you can not back up.</p>
               </div>
 
               {/* Result */}
@@ -753,7 +782,37 @@ function Home() {
                     <div><p className="eyebrow mb-2">keywords you have ({m.keyword_have.length})</p><Tokens have={m.keyword_have} /></div>
                     <div><p className="eyebrow mb-2">wanted, not in your CV ({m.keyword_missing.length})</p><Tokens gap={m.keyword_missing} /></div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Only skills already in your CV are surfaced, the missing ones are never added to your resume.</p>
+                  {m.surfaceable_skills.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="eyebrow">skills you have, added back ({m.surfaceable_skills.length})</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {m.surfaceable_skills.map((s) => (
+                          <SkillChip key={s} skill={s} tone="have" added={skillInResume(editedResume, s)}
+                            onToggle={() => setEditedResume(patchSkillsLine(editedResume, s, skillInResume(editedResume, s) ? 'remove' : 'add'))} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {m.genuine_gaps.length > 0 && (() => {
+                    const addedGaps = m.genuine_gaps.filter((s) => skillInResume(editedResume, s))
+                    return (
+                      <div className="rounded-lg border p-3 space-y-1.5"
+                        style={{ borderColor: 'color-mix(in oklab, var(--honesty) 40%, transparent)', background: 'color-mix(in oklab, var(--honesty) 8%, transparent)' }}>
+                        <p className="eyebrow" style={{ color: 'var(--honesty)' }}>
+                          added for ATS, not yet in your CV ({addedGaps.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {m.genuine_gaps.map((s) => (
+                            <SkillChip key={s} skill={s} tone="gap" added={skillInResume(editedResume, s)}
+                              onToggle={() => setEditedResume(patchSkillsLine(editedResume, s, skillInResume(editedResume, s) ? 'remove' : 'add'))} />
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground pt-0.5">
+                          Be ready to speak to these in an interview, or click to remove any you can not back up.
+                        </p>
+                      </div>
+                    )
+                  })()}
 
                   {/* Deterministic honesty check (guard against an absent field) */}
                   {(result.honesty ?? []).length === 0 ? (
