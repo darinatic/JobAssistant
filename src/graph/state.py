@@ -71,6 +71,9 @@ class ApplicationState:
     # they're not going to use (e.g. applications that don't take a cover letter).
     include_resume: bool = True
     include_cover_letter: bool = True
+    # Persist the tailored resume to disk (outputs/). Default off: the stateless web
+    # path stores nothing. The CLI opts in to get a saved file.
+    persist: bool = False
 
     @property
     def should_apply(self) -> bool:

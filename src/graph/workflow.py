@@ -73,8 +73,9 @@ async def tailor_resume_node(state: ApplicationState) -> ApplicationState:
             target_line_budget=state.target_line_budget,
         )
         state.tailored_resume = tailored
-        filepath = await resume_tailor.save_tailored_resume(tailored, state.parsed_jd)
-        state.tailored_resume_path = str(filepath)
+        if state.persist:
+            filepath = await resume_tailor.save_tailored_resume(tailored, state.parsed_jd)
+            state.tailored_resume_path = str(filepath)
     except Exception as e:
         state.errors.append(f"Resume tailoring failed: {e}")
         state.status = WorkflowStatus.FAILED
@@ -204,6 +205,7 @@ async def process_job(
     include_resume: bool = True,
     include_cover_letter: bool = True,
     target_line_budget: float | None = None,
+    persist: bool = False,
 ) -> ApplicationState:
     app = create_tailoring_app()
 
@@ -216,6 +218,7 @@ async def process_job(
         target_line_budget=target_line_budget,
         include_resume=include_resume,
         include_cover_letter=include_cover_letter,
+        persist=persist,
         created_at=datetime.now().isoformat(),
     )
 
@@ -243,6 +246,7 @@ async def process_job(
             updated_at=result.get("updated_at"),
             include_resume=result.get("include_resume", include_resume),
             include_cover_letter=result.get("include_cover_letter", include_cover_letter),
+            persist=result.get("persist", persist),
         )
 
     return result

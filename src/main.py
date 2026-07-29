@@ -27,7 +27,7 @@ async def process_job_command(jd_source: str, url: str | None = None) -> int:
     jd_text = jd_path.read_text(encoding="utf-8") if jd_path.exists() else jd_source
 
     console.print("\n[yellow]Processing job application...[/yellow]\n")
-    result = await process_job(jd_text=jd_text, job_url=url)
+    result = await process_job(jd_text=jd_text, job_url=url, persist=True)
 
     if result.parsed_jd:
         console.print(Panel(
