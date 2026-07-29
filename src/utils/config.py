@@ -80,11 +80,8 @@ class Settings(BaseSettings):
     # Phase 10 — shared resume↔JD fit predictor (bi-encoder + LoRA, ONNX served).
     # 'none' (default) = feature off, predict_fit() is a no-op. 'v1' = load model.
     match_predictor_model: str = "none"
-    # HF Hub repo id holding the versioned ONNX artifact (private), or a local path.
-    match_predictor_repo: str | None = None
+    # Local dir holding the baked ONNX artifact (model.onnx + tokenizer.json).
     match_predictor_path: str | None = None
-    hf_token: SecretStr | None = None      # download the private artifact
-    wandb_api_key: SecretStr | None = None  # training-box only
 
     # LangSmith observability (optional, OFF by default). When enabled, LangChain
     # LLM calls trace to LangSmith (env-driven at startup — no call-site changes).

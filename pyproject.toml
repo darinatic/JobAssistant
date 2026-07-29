@@ -28,7 +28,6 @@ dependencies = [
     "langchain>=1.2.15,<2.0.0",
     "langgraph>=1.1.6,<2.0.0",
     "langchain-anthropic>=1.4.0,<2.0.0",
-    "langchain-community>=0.4.1,<0.5.0",
 
     # PDF Processing
     # markitdown: uploaded resume PDF -> markdown. Resume/cover-letter OUTPUT is
@@ -53,7 +52,6 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "python-dotenv>=1.2.1",
     "rich>=14.3.1",
-    "tenacity>=9.1.4",
 ]
 
 [project.optional-dependencies]
@@ -91,7 +89,6 @@ observability = [
 predictor = [
     "onnxruntime>=1.18.0",
     "tokenizers>=0.20.0",
-    "huggingface-hub>=0.25.0",  # pull the version-pinned ONNX artifact
     "numpy>=1.26.0",
 ]
 
