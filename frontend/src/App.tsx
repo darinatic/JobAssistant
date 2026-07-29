@@ -165,7 +165,7 @@ function Home() {
   const [analyzing, setAnalyzing] = useState(false)
   const [downloading, setDownloading] = useState<'resume' | 'cover' | null>(null)
   // Gated search (predictor on): live progress toward N good-fit jobs + floor flag.
-  const [progress, setProgress] = useState<{ found: number; target: number; scanned: number } | null>(null)
+  const [progress, setProgress] = useState<{ found: number; target: number; scanned: number; unfetchable?: number } | null>(null)
   const [floor, setFloor] = useState(false)
   const searchAbort = useRef<AbortController | null>(null)
   const enrichAbort = useRef<AbortController | null>(null)
@@ -610,6 +610,11 @@ function Home() {
                 {floor && !searching && (
                   <p className="eyebrow" style={{ color: 'var(--honesty)' }}>
                     Fewer than {progress?.target ?? 'N'} strong matches; showing the closest.
+                  </p>
+                )}
+                {!searching && progress && (progress.unfetchable ?? 0) > 0 && (progress.unfetchable ?? 0) >= progress.scanned && (
+                  <p className="eyebrow" style={{ color: 'var(--honesty)' }}>
+                    Some job sources did not respond, so results may be incomplete.
                   </p>
                 )}
                 {jobs.length > 0 && (

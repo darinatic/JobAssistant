@@ -273,6 +273,7 @@ async def search_jobs_gated_stream(
 
     passed = 0
     scanned = 0
+    unfetchable = 0  # JDs we couldn't fetch (e.g. Browserbase down / walled after retry)
     done_workers = 0
     best: list[dict] = []
     yielded: set[str] = set()
@@ -283,10 +284,12 @@ async def search_jobs_gated_stream(
                 done_workers += 1
                 continue
             if item is None:
-                continue  # skipped (unfetchable)
+                unfetchable += 1  # count it so a broken fetcher isn't silently invisible
+                continue
             scanned += 1
             best.append(item)
-            yield {"type": "progress", "found": passed, "target": n_target, "scanned": scanned}
+            yield {"type": "progress", "found": passed, "target": n_target,
+                   "scanned": scanned, "unfetchable": unfetchable}
             if (item.get("fit") or 0) >= settings.match_gate_threshold:
                 passed += 1
                 yielded.add(f"{item['platform']}:{item['external_id']}")
@@ -296,6 +299,14 @@ async def search_jobs_gated_stream(
         for w in workers:
             w.cancel()
         await asyncio.gather(prod, *workers, return_exceptions=True)
+
+    # If most non-MCF candidates were unfetchable, the fetcher (Browserbase/scraper) is
+    # likely degraded — surface it in the logs instead of silently returning few results.
+    if unfetchable and unfetchable >= max(3, scanned):
+        log.warning(
+            "Gated search: %d of %d candidate JDs were unfetchable — Browserbase/scraper may be degraded.",
+            unfetchable, unfetchable + scanned,
+        )
 
     # Floor: too few passed -> top up with the best sub-threshold jobs, labeled.
     if passed < n_target:

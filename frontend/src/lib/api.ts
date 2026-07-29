@@ -137,7 +137,7 @@ export const api = {
     body: { query: string; filters?: SearchFilters; resume_markdown?: string },
     h: {
       onInterpreted: (d: Record<string, any>) => void
-      onProgress?: (p: { found: number; target: number; scanned: number }) => void
+      onProgress?: (p: { found: number; target: number; scanned: number; unfetchable?: number }) => void
       onJob: (j: Job) => void
       onDone: (floor?: boolean) => void
     },
