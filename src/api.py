@@ -313,16 +313,32 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
 
     q = build_query(req.filters, req.query) if req.filters is not None else await parse_search_query(req.query)
 
+    from src import match_predictor
+
     async def gen():
         yield json.dumps({"type": "interpreted", "data": q.model_dump()}) + "\n"
-        async for job in job_search.search_jobs_stream(
-            keyword=q.keyword, location=q.location, platforms=q.platforms or None,
-            max_jobs=q.max_jobs, date_posted=q.date_posted,
-            experience_levels=q.experience_levels, remote_options=q.remote_options,
-            master_cv=req.resume_markdown,
-        ):
-            yield json.dumps({"type": "job", "data": job}) + "\n"
-        yield json.dumps({"type": "done"}) + "\n"
+        floor = False
+        if match_predictor.is_enabled() and req.resume_markdown:
+            # Predictor on: score every job and surface only good-fit ones.
+            async for msg in job_search.search_jobs_gated_stream(
+                keyword=q.keyword, location=q.location, platforms=q.platforms or None,
+                max_jobs=q.max_jobs, date_posted=q.date_posted,
+                experience_levels=q.experience_levels, remote_options=q.remote_options,
+                master_cv=req.resume_markdown,
+            ):
+                if msg.get("type") == "job" and msg["data"].get("below_threshold"):
+                    floor = True
+                yield json.dumps(msg) + "\n"
+        else:
+            # Predictor off: the original lazy pipeline (cards first, enrich later).
+            async for job in job_search.search_jobs_stream(
+                keyword=q.keyword, location=q.location, platforms=q.platforms or None,
+                max_jobs=q.max_jobs, date_posted=q.date_posted,
+                experience_levels=q.experience_levels, remote_options=q.remote_options,
+                master_cv=req.resume_markdown,
+            ):
+                yield json.dumps({"type": "job", "data": job}) + "\n"
+        yield json.dumps({"type": "done", "floor": floor}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
