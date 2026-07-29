@@ -75,6 +75,7 @@ export interface Job {
   matched_skills?: string[]
   missing_skills?: string[]
   has_description?: boolean
+  below_threshold?: boolean   // gated search: shown by the floor, below the fit gate
   posted_date?: string
   salary_min?: number | null
   salary_max?: number | null
@@ -134,7 +135,12 @@ export const api = {
   // Progressive search — NDJSON stream. Calls handlers as results arrive.
   searchStream: async (
     body: { query: string; filters?: SearchFilters; resume_markdown?: string },
-    h: { onInterpreted: (d: Record<string, any>) => void; onJob: (j: Job) => void; onDone: () => void },
+    h: {
+      onInterpreted: (d: Record<string, any>) => void
+      onProgress?: (p: { found: number; target: number; scanned: number }) => void
+      onJob: (j: Job) => void
+      onDone: (floor?: boolean) => void
+    },
     signal?: AbortSignal,
   ): Promise<void> => {
     const res = await fetch(`${API_URL}/search/stream`, {
@@ -157,8 +163,9 @@ export const api = {
         if (!line.trim()) continue
         const msg = JSON.parse(line)
         if (msg.type === 'interpreted') h.onInterpreted(msg.data)
+        else if (msg.type === 'progress') h.onProgress?.(msg.data)
         else if (msg.type === 'job') h.onJob(msg.data)
-        else if (msg.type === 'done') h.onDone()
+        else if (msg.type === 'done') h.onDone(msg.floor)
       }
     }
   },

@@ -164,6 +164,9 @@ function Home() {
   const [insights, setInsights] = useState<Insights | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [downloading, setDownloading] = useState<'resume' | 'cover' | null>(null)
+  // Gated search (predictor on): live progress toward N good-fit jobs + floor flag.
+  const [progress, setProgress] = useState<{ found: number; target: number; scanned: number } | null>(null)
+  const [floor, setFloor] = useState(false)
   const searchAbort = useRef<AbortController | null>(null)
   const enrichAbort = useRef<AbortController | null>(null)
 
@@ -276,6 +279,7 @@ function Home() {
 
   function clearResults() {
     setJobs([]); setInsights(null); setPending(new Set()); setInterpreted(null)
+    setProgress(null); setFloor(false)
     try { localStorage.removeItem(SEARCH_KEY) } catch { /* ignore */ }
   }
 
@@ -305,6 +309,7 @@ function Home() {
     const ac = new AbortController()
     searchAbort.current = ac
     setSearching(true); setPending(new Set()); setJobs([]); setInterpreted(null); setInsights(null)
+    setProgress(null); setFloor(false)
     const collected: Job[] = []
     try {
       await api.searchStream(
@@ -315,6 +320,7 @@ function Home() {
         },
         {
           onInterpreted: (d) => { setInterpreted(d) },
+          onProgress: (p) => setProgress(p),
           onJob: (j) => {
             // A platform can return the same posting twice; skip duplicates so the
             // list keys stay unique and a job isn't double-counted.
@@ -329,7 +335,7 @@ function Home() {
               return cv ? next.sort((a, b) => jobRank(b) - jobRank(a)) : next
             })
           },
-          onDone: () => {},
+          onDone: (fl) => setFloor(!!fl),
         },
         ac.signal,
       )
@@ -573,7 +579,18 @@ function Home() {
                   </div>
                 </div>
 
-                {searching && (
+                {searching && progress && (
+                  <div className="space-y-1.5">
+                    <p className="font-mono text-xs text-muted-foreground">
+                      ▸ {progress.found} of {progress.target} good-fit found · {progress.scanned} scanned…
+                    </p>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary transition-[width] duration-300"
+                        style={{ width: `${Math.min(100, Math.round((100 * progress.found) / Math.max(1, progress.target)))}%` }} />
+                    </div>
+                  </div>
+                )}
+                {searching && !progress && (
                   <p className="font-mono text-xs text-muted-foreground animate-pulse">
                     ▸ scraping MyCareersFuture · LinkedIn · JobStreet, {jobs.length} found so far…
                   </p>
@@ -590,6 +607,11 @@ function Home() {
                   </div>
                 )}
 
+                {floor && !searching && (
+                  <p className="eyebrow" style={{ color: 'var(--honesty)' }}>
+                    Fewer than {progress?.target ?? 'N'} strong matches; showing the closest.
+                  </p>
+                )}
                 {jobs.length > 0 && (
                   <div className="flex items-center justify-between">
                     <p className="eyebrow">{jobs.length} result{jobs.length === 1 ? '' : 's'}</p>
@@ -644,7 +666,8 @@ function Home() {
                             <div className="mt-1.5"><JobMeta job={job} /></div>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
-                            {job.fit != null ? <FitBadge fit={job.fit} allFits={allFits} />
+                            {job.below_threshold ? <span className="eyebrow text-muted-foreground">closest match</span>
+                              : job.fit != null ? <FitBadge fit={job.fit} allFits={allFits} />
                               : <span className="eyebrow text-muted-foreground">unrated</span>}
                             {total > 0 && <Coverage have={have.length} total={total} />}
                             <span className="eyebrow">open →</span>
