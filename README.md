@@ -101,7 +101,7 @@ Tailoring is a **LangGraph state machine** (`parse_jd → match → tailor → c
 
 Honesty is **code-enforced, not just prompted**: a deterministic **honesty linter** post-checks the output for fabrication — an invented role/project heading, a metric not in the CV, or an industry/compliance term the CV never used — and returns advisories the UI surfaces. Fabrication means inventing *history*; adding a JD skill to the Skills section (for ATS coverage) is the tailor's job and is allowed.
 
-**Three tailoring styles** trade editorial latitude while keeping the honesty rules identical: `faithful` (keep all, reorder/rephrase) · `balanced` (condense, ~1 page) · `aggressive` (restructure + cut low-relevance sections, hard 1 page). A **one-page budget estimator** (calibrated so ~55 rendered lines ≈ one page) drives a live "≈1 page ✓ / trim ~N lines" badge as you edit.
+**Two tailoring styles** trade editorial latitude while keeping the honesty rules identical: `faithful` (keep all, reorder/rephrase) · `aggressive` (restructure + cut low-relevance sections, hard 1 page). A **one-page budget estimator** (calibrated so ~55 rendered lines ≈ one page) drives a live "≈1 page ✓ / trim ~N lines" badge as you edit.
 
 ```mermaid
 flowchart LR

@@ -154,7 +154,7 @@ def _compare(v_a: str, v_b: str, style: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default="v3", help="resume_tailor prompt version to eval")
-    ap.add_argument("--style", default="faithful", choices=["faithful", "balanced", "aggressive"])
+    ap.add_argument("--style", default="faithful", choices=["faithful", "aggressive"])
     ap.add_argument("--compare", nargs=2, metavar=("VER_A", "VER_B"),
                     help="diff two already-saved runs instead of running")
     ap.add_argument("--judge", action="store_true",
