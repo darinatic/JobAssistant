@@ -233,6 +233,9 @@ async def search_jobs_gated_stream(
     cap = max(n_target, n_target * settings.gate_scrape_cap_mult)
     cv_skills = extract_skills(master_cv) if master_cv else None
     n_workers = max(1, int(settings.browserbase_max_sessions))
+    # Encode the CV ONCE for the whole search; workers reuse the embedding to score
+    # each JD (the two-tower predictor), instead of re-encoding the CV per job.
+    cv_emb = await asyncio.to_thread(match_predictor.embed_resume, master_cv or "")
 
     card_q: asyncio.Queue = asyncio.Queue()
     out_q: asyncio.Queue = asyncio.Queue()
@@ -264,7 +267,7 @@ async def search_jobs_gated_stream(
                 continue
             clean = preprocess_jd(jd)
             prob = await asyncio.to_thread(
-                match_predictor.predict_fit, master_cv or "", f"{job.get('title','')}\n{clean}"
+                match_predictor.score, cv_emb, f"{job.get('title','')}\n{clean}"
             )
             await out_q.put(_enrich_scored(job, jd, cv_skills, prob))
 

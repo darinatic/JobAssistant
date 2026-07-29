@@ -27,11 +27,12 @@ def test_gate_passes_only_above_threshold(monkeypatch):
     monkeypatch.setattr(search.settings, "match_gate_threshold", 50)
     monkeypatch.setattr(search.settings, "gate_scrape_cap_mult", 3)
 
-    def fake_predict(cv, jd):
+    def fake_score(emb, jd):
         return 0.8 if ("role 0" in jd or "role 2" in jd or "role 4" in jd) else 0.2
 
     with patch("src.match_predictor.is_enabled", return_value=True), \
-         patch("src.match_predictor.predict_fit", side_effect=fake_predict):
+         patch("src.match_predictor.embed_resume", return_value="CVEMB"), \
+         patch("src.match_predictor.score", side_effect=fake_score):
         items = _collect(search.search_jobs_gated_stream(
             keyword="AI", max_jobs=2, master_cv="my cv"))
     jobs = [i["data"] for i in items if i["type"] == "job"]
@@ -45,11 +46,12 @@ def test_floor_when_too_few_pass(monkeypatch):
     monkeypatch.setattr(search.settings, "match_gate_threshold", 90)  # nothing passes
     monkeypatch.setattr(search.settings, "gate_scrape_cap_mult", 3)
 
-    def fake_predict(cv, jd):
+    def fake_score(emb, jd):
         return 0.30
 
     with patch("src.match_predictor.is_enabled", return_value=True), \
-         patch("src.match_predictor.predict_fit", side_effect=fake_predict):
+         patch("src.match_predictor.embed_resume", return_value="CVEMB"), \
+         patch("src.match_predictor.score", side_effect=fake_score):
         items = _collect(search.search_jobs_gated_stream(
             keyword="AI", max_jobs=3, master_cv="my cv"))
     jobs = [i["data"] for i in items if i["type"] == "job"]
@@ -62,7 +64,8 @@ def test_emits_progress(monkeypatch):
     monkeypatch.setattr(search.settings, "match_gate_threshold", 50)
 
     with patch("src.match_predictor.is_enabled", return_value=True), \
-         patch("src.match_predictor.predict_fit", return_value=0.8):
+         patch("src.match_predictor.embed_resume", return_value="CVEMB"), \
+         patch("src.match_predictor.score", return_value=0.8):
         items = _collect(search.search_jobs_gated_stream(
             keyword="AI", max_jobs=2, master_cv="cv"))
     assert any(i["type"] == "progress" for i in items)
