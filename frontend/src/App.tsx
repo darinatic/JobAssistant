@@ -14,7 +14,7 @@ import { fitLabel } from '@/lib/fit'
 import { patchSkillsLine, skillInResume } from '@/lib/skills'
 import {
   DATE_OPTIONS, EXPERIENCE_OPTIONS, PLATFORM_OPTIONS, REMOTE_OPTIONS, MAX_JOBS_OPTIONS,
-  DEFAULT_FILTERS, filtersFromInterpreted, toRequestFilters, type FilterState,
+  DEFAULT_FILTERS, toRequestFilters, type FilterState,
 } from '@/lib/search-filters'
 
 // Stable per-job key for the pending/enrichment set.
@@ -34,7 +34,7 @@ const STYLES = [
   { key: 'faithful' as const, hint: 'Keep everything, reorder and rephrase only. Safest.' },
   { key: 'aggressive' as const, hint: 'Restructure, cut low-relevance sections, hard one page. Max fit.' },
 ]
-type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[]; filters?: FilterState; manualFilters?: boolean }
+type SavedSearch = { query?: string; interpreted?: Record<string, any> | null; jobs?: Job[]; filters?: FilterState }
 
 function loadSearch(): SavedSearch {
   try { return JSON.parse(localStorage.getItem(SEARCH_KEY) || '{}') } catch { return {} }
@@ -158,8 +158,6 @@ function Home() {
   const [interpreted, setInterpreted] = useState<Record<string, any> | null>(saved.interpreted ?? null)
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
   const [filters, setFilters] = useState<FilterState>(saved.filters ?? DEFAULT_FILTERS)
-  // NL box edited -> next search is an AI parse; a dropdown touched -> deterministic (no-LLM) search.
-  const [manualFilters, setManualFilters] = useState(saved.manualFilters ?? false)
   const [searching, setSearching] = useState(false)
   // Job keys still backfilling their description/keywords/fit, drives per-card skeletons.
   const [pending, setPending] = useState<Set<string>>(() => new Set())
@@ -228,8 +226,8 @@ function Home() {
   // losing everything. Skip writing while a search is streaming in.
   useEffect(() => {
     if (searching) return
-    try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs, filters, manualFilters })) } catch { /* quota */ }
-  }, [query, interpreted, jobs, filters, manualFilters, searching])
+    try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs, filters })) } catch { /* quota */ }
+  }, [query, interpreted, jobs, filters, searching])
 
   // Abort any in-flight streams when the page unmounts (refresh/navigate).
   useEffect(() => () => { searchAbort.current?.abort(); enrichAbort.current?.abort() }, [])
@@ -291,14 +289,13 @@ function Home() {
   }
 
   function toggleFilter(key: 'experienceLevels' | 'remoteOptions' | 'platforms', value: string) {
-    setManualFilters(true)
     setFilters((f) => {
       const has = f[key].includes(value)
       return { ...f, [key]: has ? f[key].filter((v) => v !== value) : [...f[key], value] }
     })
   }
-  function setDate(value: string) { setManualFilters(true); setFilters((f) => ({ ...f, datePosted: value })) }
-  function setMax(value: number) { setManualFilters(true); setFilters((f) => ({ ...f, maxJobs: value })) }
+  function setDate(value: string) { setFilters((f) => ({ ...f, datePosted: value })) }
+  function setMax(value: number) { setFilters((f) => ({ ...f, maxJobs: value })) }
 
   async function onSearch() {
     if (!cv) return toast.error('Upload your resume first, then search.')
@@ -314,10 +311,10 @@ function Home() {
         {
           query,
           resume_markdown: cv || undefined,
-          filters: manualFilters ? toRequestFilters(filters, query, interpreted?.location ?? 'Singapore') : undefined,
+          filters: toRequestFilters(filters, query, interpreted?.location ?? 'Singapore'),
         },
         {
-          onInterpreted: (d) => { setInterpreted(d); setFilters(filtersFromInterpreted(d)) },
+          onInterpreted: (d) => { setInterpreted(d) },
           onJob: (j) => {
             // A platform can return the same posting twice; skip duplicates so the
             // list keys stay unique and a job isn't double-counted.
@@ -520,7 +517,7 @@ function Home() {
 
               <TabsContent value="search" className="space-y-4 pt-4">
                 <div className="flex gap-2">
-                  <Input value={query} onChange={(e) => { setQuery(e.target.value); setManualFilters(false) }}
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && onSearch()}
                     placeholder={'e.g. "50 remote AI Engineer jobs on JobStreet, this week"'} />
                   <Button onClick={onSearch} disabled={searching}>{searching ? 'Searching…' : 'Search'}</Button>
