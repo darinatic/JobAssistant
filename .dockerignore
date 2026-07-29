@@ -33,3 +33,8 @@ scripts
 tests
 *.md
 !README.md
+
+# The fused source model is split (scripts/split_fit_predictor.py) into
+# encoder.onnx + head.onnx, which are what's served. Keep model.onnx in git for
+# re-splitting, but don't ship the 90MB source in the image.
+models/fit-predictor/model.onnx
