@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     # whenever browserbase_enabled. Off by default — local dev uses in-container Chromium.
     browserbase_scrapers: bool = False
 
+    # Predictor-gated search: only jobs with calibrated fit >= threshold (0-100) are
+    # surfaced; scrape at most cap_mult x N candidates before falling back to the
+    # best found (floor). Gating is active only when the predictor is enabled.
+    match_gate_threshold: float = 40
+    gate_scrape_cap_mult: int = 3
+    # Global ceiling on concurrent Browserbase sessions across ALL requests, so a
+    # burst of users can't exceed the plan. Used by src/browser/pool.py.
+    browserbase_max_sessions: int = 8
+
     # Per-IP rate limits for the expensive endpoints (LLM + scrape). 0 = disabled.
     # Sized for a public no-auth demo; override via env in production.
     rate_limit_per_min: int = 12
