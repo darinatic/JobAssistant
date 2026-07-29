@@ -1,7 +1,6 @@
 """JD parsing agent."""
 
 import re
-from typing import Optional
 
 import httpx
 from langchain_anthropic import ChatAnthropic
@@ -10,7 +9,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.schemas import ParsedJobDescription
 from src.prompts import get_prompt
 from src.utils.config import settings
-
 
 _HUMAN_PROMPT_TEMPLATE = """Parse the following job description and extract all relevant information.
 
@@ -44,8 +42,8 @@ class JDParserAgent:
     async def parse(
         self,
         jd_text: str,
-        source_url: Optional[str] = None,
-        platform: Optional[str] = None,
+        source_url: str | None = None,
+        platform: str | None = None,
     ) -> ParsedJobDescription:
         result: ParsedJobDescription = await self.structured_llm.ainvoke(
             self._build_messages(jd_text)
@@ -57,8 +55,8 @@ class JDParserAgent:
     def parse_sync(
         self,
         jd_text: str,
-        source_url: Optional[str] = None,
-        platform: Optional[str] = None,
+        source_url: str | None = None,
+        platform: str | None = None,
     ) -> ParsedJobDescription:
         result: ParsedJobDescription = self.structured_llm.invoke(
             self._build_messages(jd_text)
@@ -101,7 +99,7 @@ class JDParserAgent:
 
             return text
 
-    def _detect_platform(self, url: Optional[str]) -> Optional[str]:
+    def _detect_platform(self, url: str | None) -> str | None:
         if not url:
             return None
 

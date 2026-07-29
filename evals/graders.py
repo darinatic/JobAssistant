@@ -21,9 +21,9 @@ def _supportable_coverage(cv: str, jd: str, tailored: str) -> float:
 
 def _structure_ok(md: str) -> bool:
     lines = md.splitlines()
-    has_name = any(l.startswith("# ") for l in lines)
-    has_section = any(l.startswith("## ") for l in lines)
-    has_bullet = any(l.strip().startswith("- ") for l in lines)
+    has_name = any(line.startswith("# ") for line in lines)
+    has_section = any(line.startswith("## ") for line in lines)
+    has_bullet = any(line.strip().startswith("- ") for line in lines)
     return has_name and has_section and has_bullet
 
 

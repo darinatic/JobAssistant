@@ -16,7 +16,7 @@ async def _fake_gated(**kwargs):
 
 
 def _lines(resp):
-    return [json.loads(l) for l in resp.text.splitlines() if l.strip()]
+    return [json.loads(line) for line in resp.text.splitlines() if line.strip()]
 
 
 def test_stream_uses_gate_when_predictor_enabled():

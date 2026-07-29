@@ -93,6 +93,7 @@ class _FitFake:
 @pytest.mark.asyncio
 async def test_search_adds_fit_and_ranks_by_it(monkeypatch):
     import re
+
     import src.match_predictor as mp
     monkeypatch.setattr(mp, "is_enabled", lambda: True)
     monkeypatch.setattr(mp, "predict_fit", lambda cv, text: float(re.search(r"score=([\d.]+)", text).group(1)))

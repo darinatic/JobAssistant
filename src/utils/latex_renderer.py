@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 
-class LatexUnavailable(RuntimeError):
+class LatexUnavailable(RuntimeError):  # noqa: N818  (public name kept for back-compat)
     """The Tectonic binary could not be found on PATH."""
 
 

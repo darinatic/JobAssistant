@@ -6,7 +6,6 @@ structured-output mode as part of the tool schema.
 
 import re
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -65,7 +64,7 @@ class ParsedJobDescription(BaseModel):
         description="Experience requirement as stated (e.g., '2-4 years')"
     )
     experience_level: ExperienceLevel = Field(description="Classified experience level")
-    education_required: Optional[str] = Field(
+    education_required: str | None = Field(
         default=None,
         description="Education requirements if specified",
     )
@@ -79,7 +78,7 @@ class ParsedJobDescription(BaseModel):
         description="Specific technologies, frameworks, and tools mentioned",
     )
 
-    salary_range: Optional[str] = Field(default=None, description="Salary range if disclosed")
+    salary_range: str | None = Field(default=None, description="Salary range if disclosed")
     benefits: list[str] = Field(
         default_factory=list,
         description="Benefits mentioned (equity, health, etc.)",
@@ -94,8 +93,8 @@ class ParsedJobDescription(BaseModel):
         description="Key terms to incorporate into tailored resume",
     )
 
-    source_url: Optional[str] = Field(default=None, description="URL where the job was found")
-    platform: Optional[str] = Field(
+    source_url: str | None = Field(default=None, description="URL where the job was found")
+    platform: str | None = Field(
         default=None,
         description="Platform (LinkedIn, Jobstreet, MyCareersFuture, direct)",
     )

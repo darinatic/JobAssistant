@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from operator import add
-from typing import Annotated, Optional
+from typing import Annotated
 
 from src.agents.schemas import (
     CoverLetter,
@@ -34,12 +34,12 @@ class WorkflowStatus(str, Enum):
 @dataclass
 class ApplicationState:
     job_description_text: str = ""
-    job_url: Optional[str] = None
-    platform: Optional[str] = None
+    job_url: str | None = None
+    platform: str | None = None
 
     # The candidate's master CV (markdown). Threaded per-request in the stateless
     # app; falls back to the local master_cv.md file when omitted.
-    master_cv: Optional[str] = None
+    master_cv: str | None = None
 
     # Tailoring style: faithful (keep all, reorder/rephrase) | aggressive
     # (restructure + cut + hard 1 page).
@@ -47,24 +47,24 @@ class ApplicationState:
 
     # Optional explicit rendered-line budget for a "fit to page" re-tailor — when
     # set it overrides the style's length rule (see resume_tailor._budget_rule).
-    target_line_budget: Optional[float] = None
+    target_line_budget: float | None = None
 
     status: WorkflowStatus = WorkflowStatus.PENDING
 
-    parsed_jd: Optional[ParsedJobDescription] = None
-    skill_match: Optional[SkillMatch] = None
-    tailored_resume: Optional[TailoredResume] = None
-    cover_letter: Optional[CoverLetter] = None
-    company_context: Optional[str] = None  # Phase 9.3 — web-research used for the cover letter
+    parsed_jd: ParsedJobDescription | None = None
+    skill_match: SkillMatch | None = None
+    tailored_resume: TailoredResume | None = None
+    cover_letter: CoverLetter | None = None
+    company_context: str | None = None  # Phase 9.3 — web-research used for the cover letter
 
-    tailored_resume_path: Optional[str] = None
-    cover_letter_path: Optional[str] = None
+    tailored_resume_path: str | None = None
+    cover_letter_path: str | None = None
 
     # Annotated with `add` so LangGraph merges errors from parallel nodes.
     errors: Annotated[list[str], add] = field(default_factory=list)
 
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
     # Flags the workflow's conditional edges respect: callers can opt out of
     # the resume or cover-letter step to avoid burning Sonnet calls on output

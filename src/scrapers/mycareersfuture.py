@@ -10,12 +10,11 @@ from __future__ import annotations
 import asyncio
 import datetime
 import re
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
-
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")

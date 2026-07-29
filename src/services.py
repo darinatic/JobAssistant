@@ -5,7 +5,6 @@ layer passes the candidate's CV in per request.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from src.agents import (
     CoverLetterAgent,
@@ -28,9 +27,9 @@ from src.utils.config import settings
 class TailoringResult:
     parsed_jd: ParsedJobDescription
     skill_match: SkillMatch
-    tailored_resume: Optional[TailoredResume]
-    cover_letter: Optional[CoverLetter]
-    tailored_resume_path: Optional[str]
+    tailored_resume: TailoredResume | None
+    cover_letter: CoverLetter | None
+    tailored_resume_path: str | None
     status: str
     errors: list[str]
 
@@ -47,9 +46,9 @@ class TailoringResult:
         )
 
 
-_jd_parser: Optional[JDParserAgent] = None
-_resume_tailor: Optional[ResumeTailorAgent] = None
-_cover_letter_agent: Optional[CoverLetterAgent] = None
+_jd_parser: JDParserAgent | None = None
+_resume_tailor: ResumeTailorAgent | None = None
+_cover_letter_agent: CoverLetterAgent | None = None
 
 
 def _get_jd_parser() -> JDParserAgent:
@@ -75,15 +74,15 @@ def _get_cover_letter_agent() -> CoverLetterAgent:
 
 async def parse_jd(
     jd_text: str,
-    source_url: Optional[str] = None,
-    platform: Optional[str] = None,
+    source_url: str | None = None,
+    platform: str | None = None,
 ) -> ParsedJobDescription:
     return await _get_jd_parser().parse(jd_text, source_url=source_url, platform=platform)
 
 
 async def score_jd(
     parsed_jd: ParsedJobDescription,
-    master_cv: Optional[str] = None,
+    master_cv: str | None = None,
 ) -> SkillMatch:
     """Deterministic local skills match — no LLM call (see `src/matching`)."""
     cv = master_cv if master_cv is not None else settings.get_master_cv()
@@ -93,7 +92,7 @@ async def score_jd(
 async def tailor_resume(
     parsed_jd: ParsedJobDescription,
     skill_match: SkillMatch,
-    master_cv: Optional[str] = None,
+    master_cv: str | None = None,
 ) -> TailoredResume:
     return await _get_resume_tailor().tailor(parsed_jd, skill_match, master_cv=master_cv)
 
@@ -112,13 +111,13 @@ async def generate_cover_letter(
 
 async def run_full_tailoring(
     jd_text: str,
-    job_url: Optional[str] = None,
-    platform: Optional[str] = None,
-    master_cv: Optional[str] = None,
+    job_url: str | None = None,
+    platform: str | None = None,
+    master_cv: str | None = None,
     style: str = "faithful",
     include_resume: bool = True,
     include_cover_letter: bool = True,
-    target_line_budget: Optional[float] = None,
+    target_line_budget: float | None = None,
 ) -> TailoringResult:
     """Full pipeline: parse → match → tailor → cover letter.
 
@@ -137,7 +136,7 @@ async def run_full_tailoring(
 async def cover_letter_for(
     jd_text: str,
     resume_markdown: str,
-    master_cv: Optional[str] = None,
+    master_cv: str | None = None,
 ) -> CoverLetter:
     """Standalone cover letter for an (already tailored) resume — parse the JD,
     match against the resume, then generate. Used by the separate CL button."""

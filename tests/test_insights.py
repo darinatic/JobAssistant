@@ -1,6 +1,5 @@
 """Stateless insights aggregation."""
 
-from unittest.mock import patch
 
 from src.insights import aggregate_jobs
 

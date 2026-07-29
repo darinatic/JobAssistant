@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Optional
+from typing import Any
 
 from src.utils.config import settings
 
@@ -35,7 +35,7 @@ _HEAD = "head.onnx"
 _TOKENIZER = "tokenizer.json"
 
 _lock = threading.Lock()
-_bundle: Optional[tuple] = None   # (encoder session, head session, Tokenizer, calibration|None)
+_bundle: tuple | None = None   # (encoder session, head session, Tokenizer, calibration|None)
 _load_failed = False
 
 
@@ -43,12 +43,12 @@ def is_enabled() -> bool:
     return (settings.match_predictor_model or "none").lower() not in ("", "none")
 
 
-def _artifact_dir() -> Optional[str]:
+def _artifact_dir() -> str | None:
     """Local dir holding the baked encoder.onnx + head.onnx + tokenizer.json."""
     return settings.match_predictor_path or None
 
 
-def _load() -> Optional[tuple]:
+def _load() -> tuple | None:
     import json
     import os
 
@@ -73,7 +73,7 @@ def _load() -> Optional[tuple]:
     return enc, head, tok, calib
 
 
-def _get_bundle() -> Optional[tuple]:
+def _get_bundle() -> tuple | None:
     global _bundle, _load_failed
     if _bundle is not None:
         return _bundle
@@ -110,7 +110,7 @@ def _embed(enc_session, tok, text: str):
     return enc_session.run(["embedding"], {"input_ids": ids, "attention_mask": mask})[0]
 
 
-def embed_resume(resume_text: str) -> Optional[Any]:
+def embed_resume(resume_text: str) -> Any | None:
     """Encode the CV once and return its embedding (reusable across many JDs), or
     None if the feature is off / unavailable. Synchronous (ONNX CPU) — call via
     asyncio.to_thread from async code. Never raises."""
@@ -127,7 +127,7 @@ def embed_resume(resume_text: str) -> Optional[Any]:
         return None
 
 
-def score(resume_emb: Any, jd_text: str) -> Optional[float]:
+def score(resume_emb: Any, jd_text: str) -> float | None:
     """Fit probability in [0,1] for a JD against a pre-computed CV embedding, or
     None if unavailable. Encodes only the JD tower + the tiny head. Never raises."""
     if resume_emb is None or not is_enabled():
@@ -149,7 +149,7 @@ def score(resume_emb: Any, jd_text: str) -> Optional[float]:
         return None
 
 
-def predict_fit(resume_text: str, jd_text: str) -> Optional[float]:
+def predict_fit(resume_text: str, jd_text: str) -> float | None:
     """One-shot (cv, jd) → fit probability, for non-gated callers. Embeds both
     towers; the gated search path uses embed_resume + score to reuse the CV."""
     emb = embed_resume(resume_text)

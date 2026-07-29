@@ -16,13 +16,12 @@ import asyncio
 import random
 import re
 import urllib.parse
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import httpx
 from bs4 import BeautifulSoup
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
-
 
 SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"

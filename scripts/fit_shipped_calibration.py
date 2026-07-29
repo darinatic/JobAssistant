@@ -172,7 +172,7 @@ def main() -> int:
 
     stretched = [apply_calibration(p, calib) for p in raw_scores]
 
-    print("\n=== Per-tier mean STRETCHED (calibrated) score, n=%d ===" % n)
+    print(f"\n=== Per-tier mean STRETCHED (calibrated) score, n={n} ===")
     for tier_name, tv in (("No Fit", 0.0), ("Potential Fit", 0.5), ("Good Fit", 1.0)):
         vals = [s for s, y in zip(stretched, tiers) if abs(y - tv) < 1e-6]
         if vals:

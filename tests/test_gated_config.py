@@ -1,4 +1,5 @@
 from pydantic import SecretStr
+
 from src.utils.config import Settings
 
 

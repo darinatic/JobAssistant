@@ -129,6 +129,11 @@ line-length = 100
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests intentionally use non-PEP8 names: mock classes mimicking real lowercase
+# attributes, emphatic test names, and short patch-handle variables.
+"tests/**" = ["N801", "N802", "N806"]
+
 [tool.mypy]
 python_version = "3.10"
 strict = true

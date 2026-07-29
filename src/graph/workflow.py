@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
 from src.agents import (
     CoverLetterAgent,
@@ -13,7 +13,6 @@ from src.agents import (
 from src.graph.state import ApplicationState, WorkflowStatus
 from src.matching import match_local
 from src.utils.config import settings
-
 
 jd_parser = JDParserAgent()
 resume_tailor = ResumeTailorAgent()

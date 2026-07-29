@@ -21,8 +21,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 log = logging.getLogger("resumeagent.prompts")
 
@@ -81,7 +80,7 @@ def _extract_prompt_text(obj) -> str:
     return tmpl if isinstance(tmpl, str) and tmpl.strip() else ""
 
 
-def _hub_prompt(name: str) -> Optional[Prompt]:
+def _hub_prompt(name: str) -> Prompt | None:
     """Pull a prompt from LangSmith Hub when tracing is on and a ref is configured
     for ``name``. Returns None (→ registry fallback) when disabled, unconfigured,
     or on ANY error — a Hub hiccup must never break tailoring."""
@@ -102,7 +101,7 @@ def _hub_prompt(name: str) -> Optional[Prompt]:
     return None
 
 
-def get_prompt(name: str, *, version: Optional[str] = None) -> Prompt:
+def get_prompt(name: str, *, version: str | None = None) -> Prompt:
     """Resolve a prompt by name. Without ``version``, resolves in order: LangSmith
     Hub (when configured) → ``PROMPT_OVERRIDES`` env var → the ``latest=True``
     version. Raises ``KeyError`` if the name is unknown or no version is selected."""

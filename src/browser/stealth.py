@@ -4,12 +4,10 @@ import asyncio
 import json
 import random
 from pathlib import Path
-from typing import Optional
 
 from patchright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from src.utils.config import settings
-
 
 USER_DATA_DIR = Path("browser_data")
 
@@ -92,9 +90,9 @@ class StealthBrowser:
         )
 
         self._playwright = None
-        self._browser: Optional[Browser] = None
-        self._context: Optional[BrowserContext] = None
-        self._page: Optional[Page] = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
         self._bb = None
         self._bb_session = None
 

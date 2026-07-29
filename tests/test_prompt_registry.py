@@ -1,7 +1,7 @@
 """Prompt resolution: LangSmith Hub (when configured) with in-repo registry fallback."""
 
 from src.prompts import registry
-from src.prompts.registry import Prompt, register, get_prompt
+from src.prompts.registry import Prompt, get_prompt, register
 from src.utils.config import settings
 
 

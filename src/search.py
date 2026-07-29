@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import asdict
-from typing import AsyncIterator
 
 from src.matching import extract_skills
 from src.scrapers import SearchParams, build_scraper
@@ -79,7 +79,7 @@ def _enrich(job: DiscoveredJob, cv_skills: set[str] | None) -> dict:
     return item
 
 
-def _enrich_scored(job: "DiscoveredJob | dict", jd: str, cv_skills: set[str] | None, prob: float | None) -> dict:
+def _enrich_scored(job: DiscoveredJob | dict, jd: str, cv_skills: set[str] | None, prob: float | None) -> dict:
     """Build a fully-scored job dict: card + full JD + skill split + fit%."""
     item = dict(job) if isinstance(job, dict) else asdict(job)
     item["description"] = jd
@@ -239,7 +239,7 @@ async def search_jobs_gated_stream(
 
     card_q: asyncio.Queue = asyncio.Queue()
     out_q: asyncio.Queue = asyncio.Queue()
-    _WORKER_DONE = object()
+    _WORKER_DONE = object()  # noqa: N806  (sentinel constant, not a variable)
 
     async def producer() -> None:
         try:
@@ -402,8 +402,10 @@ async def enrich_descriptions_stream(
                 return
             # Free fallback: guest httpx loop — walls after ~5-10 jobs.
             import random
+
             import httpx
-            from src.scrapers.linkedin import LinkedInGuestScraper, _DEFAULT_HEADERS
+
+            from src.scrapers.linkedin import _DEFAULT_HEADERS, LinkedInGuestScraper
             s = LinkedInGuestScraper()
             async with httpx.AsyncClient(timeout=30.0, headers=_DEFAULT_HEADERS, follow_redirects=True) as client:
                 for job in items:

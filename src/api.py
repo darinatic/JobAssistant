@@ -9,9 +9,9 @@ import logging
 import time
 import uuid
 from io import BytesIO
-from typing import Literal, Optional
+from typing import Literal
 
-from fastapi import Body, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -19,7 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src import search as job_search
 from src import services
-from src.agents.schemas import ParsedJobDescription, SkillMatch
+from src.agents.schemas import SkillMatch
 from src.logging_setup import configure_logging
 from src.matching import extract_skills, gap_analysis, lint_resume
 from src.rate_limit import RateLimitMiddleware
@@ -30,7 +30,8 @@ configure_logging(settings.log_level)
 log = logging.getLogger("resumeagent.api")
 
 # Optional LangSmith tracing (off by default; env-driven, PII-redacted).
-from src.observability import configure_langsmith
+from src.observability import configure_langsmith  # noqa: E402  (after configure_logging by design)
+
 configure_langsmith()
 
 app = FastAPI(
@@ -87,8 +88,8 @@ class ResumeParseResponse(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=2, description="Natural language, e.g. '50 remote AI Engineer jobs on JobStreet this week'")
-    resume_markdown: Optional[str] = Field(default=None, description="If given, jobs are ranked by CV relevance")
-    filters: Optional[SearchFilters] = Field(default=None, description="Explicit UI dropdown filters; when present the LLM parse is skipped")
+    resume_markdown: str | None = Field(default=None, description="If given, jobs are ranked by CV relevance")
+    filters: SearchFilters | None = Field(default=None, description="Explicit UI dropdown filters; when present the LLM parse is skipped")
 
 
 class SearchResponse(BaseModel):
@@ -103,12 +104,12 @@ class ScoreRequest(BaseModel):
 
 class InsightsRequest(BaseModel):
     jobs: list[dict]
-    resume_markdown: Optional[str] = None
+    resume_markdown: str | None = None
 
 
 class EnrichRequest(BaseModel):
     jobs: list[dict]  # the listing's cards; those lacking a description get backfilled
-    resume_markdown: Optional[str] = None
+    resume_markdown: str | None = None
 
 
 class JobDescriptionRequest(BaseModel):
@@ -116,7 +117,7 @@ class JobDescriptionRequest(BaseModel):
     external_id: str = ""
     url: str = ""
     title: str = ""
-    resume_markdown: Optional[str] = None
+    resume_markdown: str | None = None
 
 
 class JobDescriptionResponse(BaseModel):
@@ -125,14 +126,14 @@ class JobDescriptionResponse(BaseModel):
     matched_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     relevance: int = 0
-    fit: Optional[int] = None  # learned fit 0-100 when the predictor is enabled
+    fit: int | None = None  # learned fit 0-100 when the predictor is enabled
 
 
 class RedFlagsRequest(BaseModel):
     description: str = ""
     company: str = ""
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
+    salary_min: int | None = None
+    salary_max: int | None = None
     url: str = ""
     posted_date: str = ""
 
@@ -163,12 +164,12 @@ class TailorRequest(BaseModel):
     resume_markdown: str = Field(min_length=20)
     # Editorial latitude: faithful (keep all, reorder/rephrase) | aggressive
     # (restructure + cut, hard 1pg). Honesty rules are identical at both levels.
-    style: Optional[Literal["faithful", "aggressive"]] = None
+    style: Literal["faithful", "aggressive"] | None = None
     concise: bool = False  # legacy flag; concise=True maps to 'aggressive' when style is unset
     include_cover_letter: bool = False  # cover letter is a separate button now
     # "Fit to page": when set, re-tailor with a hard rendered-line budget so a small
     # remainder doesn't waste an under-used trailing page. See page_budget.py.
-    target_pages: Optional[int] = Field(default=None, ge=1, le=5)
+    target_pages: int | None = Field(default=None, ge=1, le=5)
 
     @property
     def effective_style(self) -> str:
@@ -195,9 +196,9 @@ class ExtractJdResponse(BaseModel):
 
 
 class TailorResponse(BaseModel):
-    tailored_resume_markdown: Optional[str]
-    cover_letter_text: Optional[str] = None
-    cover_letter_word_count: Optional[int] = None
+    tailored_resume_markdown: str | None
+    cover_letter_text: str | None = None
+    cover_letter_word_count: int | None = None
     match: MatchOut
     changes_made: list[str] = Field(default_factory=list)
     keywords_added: list[str] = Field(default_factory=list)

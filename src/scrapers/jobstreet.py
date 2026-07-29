@@ -7,14 +7,12 @@ JobStreet uses stable `data-automation` attributes for testable selectors.
 
 from __future__ import annotations
 
-import asyncio
 import re
 import urllib.parse
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from src.browser.stealth import HumanBehavior, StealthBrowser
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
-
 
 # JobStreet's URL slug convention: lowercase, hyphen-separated.
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -126,7 +124,6 @@ class JobStreetScraper(JobScraper):
         # Region". The old anchor-only selector never matched, defaulting to Singapore.
         location = await self._text(card, '[data-automation="jobLocation"], [data-automation="jobCardLocation"]')
         posted = await self._text(card, 'span[data-automation="jobListingDate"]')
-        salary = await self._text(card, 'span[data-automation="jobSalary"]')
 
         return DiscoveredJob(
             platform=self.PLATFORM,
