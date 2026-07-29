@@ -43,18 +43,6 @@ export const DEFAULT_FILTERS: FilterState = {
   maxJobs: 25,
 }
 
-// interpreted SearchQuery (from the stream) -> control state, so the AI parse
-// visibly fills the dropdowns.
-export function filtersFromInterpreted(d: Record<string, any>): FilterState {
-  return {
-    datePosted: d?.date_posted ?? DEFAULT_FILTERS.datePosted,
-    experienceLevels: Array.isArray(d?.experience_levels) ? d.experience_levels : [],
-    remoteOptions: Array.isArray(d?.remote_options) ? d.remote_options : [],
-    platforms: Array.isArray(d?.platforms) ? d.platforms : [],
-    maxJobs: typeof d?.max_jobs === 'number' ? d.max_jobs : DEFAULT_FILTERS.maxJobs,
-  }
-}
-
 // control state -> backend `filters` payload (deterministic search path).
 export function toRequestFilters(f: FilterState, keyword: string, location: string): SearchFilters {
   return {

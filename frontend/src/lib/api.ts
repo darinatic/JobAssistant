@@ -129,9 +129,6 @@ export const api = {
     return handle(await fetch(`${API_URL}/resume/parse`, { method: 'POST', body: fd }))
   },
 
-  search: (body: { query: string; filters?: SearchFilters; resume_markdown?: string }) =>
-    postJson<{ jobs: Job[]; interpreted: Record<string, unknown> }>('/search', body),
-
   // Progressive search — NDJSON stream. Calls handlers as results arrive.
   searchStream: async (
     body: { query: string; filters?: SearchFilters; resume_markdown?: string },
