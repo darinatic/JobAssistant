@@ -14,6 +14,7 @@ from typing import AsyncIterator
 from src.matching import extract_skills
 from src.scrapers import SearchParams, build_scraper
 from src.scrapers.base import DiscoveredJob
+from src.utils.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +76,17 @@ def _enrich(job: DiscoveredJob, cv_skills: set[str] | None) -> dict:
     # detail fetch), so extract from title + description together.
     item["has_description"] = bool((job.description or "").strip())
     item.update(_skill_split(job.title, job.description or "", cv_skills))
+    return item
+
+
+def _enrich_scored(job: "DiscoveredJob | dict", jd: str, cv_skills: set[str] | None, prob: float | None) -> dict:
+    """Build a fully-scored job dict: card + full JD + skill split + fit%."""
+    item = dict(job) if isinstance(job, dict) else asdict(job)
+    item["description"] = jd
+    item["has_description"] = True
+    item.update(_skill_split(item.get("title", ""), jd, cv_skills))
+    item["fit"] = round((prob or 0.0) * 100)
+    item["below_threshold"] = False
     return item
 
 
@@ -193,6 +205,108 @@ async def search_jobs_stream(
         experience_levels, remote_options, cv_skills, fetch_descriptions, master_cv,
     ):
         yield job
+
+
+async def search_jobs_gated_stream(
+    keyword: str,
+    location: str = "Singapore",
+    platforms: list[str] | None = None,
+    max_jobs: int = 25,
+    date_posted: str = "any",
+    experience_levels: list[str] | None = None,
+    remote_options: list[str] | None = None,
+    master_cv: str | None = None,
+) -> AsyncIterator[dict]:
+    """Predictor-gated search: score each scraped job and surface only good-fit
+    ones (soft gate + floor + cap). JDs are fetched eagerly (MCF inline, others via
+    the bounded Browserbase pool); the JD is preprocessed before scoring. Yields
+    ``{"type":"progress",...}`` and ``{"type":"job","data":...}`` items.
+
+    Only meaningful when the predictor is enabled; callers use the lazy
+    ``search_jobs_stream`` otherwise.
+    """
+    from src import match_predictor
+    from src.browser import pool
+    from src.jd_preprocess import preprocess_jd
+
+    n_target = max_jobs
+    cap = max(n_target, n_target * settings.gate_scrape_cap_mult)
+    cv_skills = extract_skills(master_cv) if master_cv else None
+    n_workers = max(1, int(settings.browserbase_max_sessions))
+
+    card_q: asyncio.Queue = asyncio.Queue()
+    out_q: asyncio.Queue = asyncio.Queue()
+    _WORKER_DONE = object()
+
+    async def producer() -> None:
+        try:
+            async for job in _scrape(
+                keyword, location, platforms, cap, date_posted,
+                experience_levels, remote_options, cv_skills,
+                fetch_descriptions=False, master_cv=None,
+            ):
+                await card_q.put(job)
+        finally:
+            for _ in range(n_workers):
+                await card_q.put(_WORKER_DONE)
+
+    async def worker() -> None:
+        while True:
+            job = await card_q.get()
+            if job is _WORKER_DONE:
+                await out_q.put(_WORKER_DONE)
+                return
+            jd = (job.get("description") or "")
+            if not jd.strip() and (job.get("platform") or "").lower() != "mycareersfuture":
+                jd = await pool.fetch_jd(job)
+            if not jd.strip():
+                await out_q.put(None)  # unfetchable -> skip, count nothing
+                continue
+            clean = preprocess_jd(jd)
+            prob = await asyncio.to_thread(
+                match_predictor.predict_fit, master_cv or "", f"{job.get('title','')}\n{clean}"
+            )
+            await out_q.put(_enrich_scored(job, jd, cv_skills, prob))
+
+    prod = asyncio.create_task(producer())
+    workers = [asyncio.create_task(worker()) for _ in range(n_workers)]
+
+    passed = 0
+    scanned = 0
+    done_workers = 0
+    best: list[dict] = []
+    yielded: set[str] = set()
+    try:
+        while done_workers < n_workers and passed < n_target and scanned < cap:
+            item = await out_q.get()
+            if item is _WORKER_DONE:
+                done_workers += 1
+                continue
+            if item is None:
+                continue  # skipped (unfetchable)
+            scanned += 1
+            best.append(item)
+            yield {"type": "progress", "found": passed, "target": n_target, "scanned": scanned}
+            if (item.get("fit") or 0) >= settings.match_gate_threshold:
+                passed += 1
+                yielded.add(f"{item['platform']}:{item['external_id']}")
+                yield {"type": "job", "data": item}
+    finally:
+        prod.cancel()
+        for w in workers:
+            w.cancel()
+        await asyncio.gather(prod, *workers, return_exceptions=True)
+
+    # Floor: too few passed -> top up with the best sub-threshold jobs, labeled.
+    if passed < n_target:
+        for item in sorted(best, key=lambda j: j.get("fit") or 0, reverse=True):
+            key = f"{item['platform']}:{item['external_id']}"
+            if key in yielded:
+                continue
+            yield {"type": "job", "data": {**item, "below_threshold": True}}
+            yielded.add(key)
+            if len(yielded) >= n_target:
+                break
 
 
 async def fetch_job_description(platform: str, external_id: str, url: str) -> str:
