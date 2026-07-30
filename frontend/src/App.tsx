@@ -6,6 +6,10 @@ import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
 import { patchSkillsLine, skillInResume } from '@/lib/skills'
+import {
+  formatSalary, experienceLabel, hasSalary, jobTier, applyRefine, refineActive,
+  levelLabel, EMPTY_REFINE, LEVEL_ORDER, type RefineState, type Tier,
+} from '@/lib/jobfmt'
 import { SegmentedBar } from '@/overlap/SegmentedBar'
 import {
   DATE_OPTIONS, EXPERIENCE_OPTIONS, PLATFORM_OPTIONS, REMOTE_OPTIONS, MAX_JOBS_OPTIONS,
@@ -124,9 +128,29 @@ function FitBadge({ fit, allFits }: { fit?: number; allFits: number[] }) {
 
 function JobMeta({ job }: { job: Job }) {
   return (
-    <span className="ov-mono" style={{ fontSize: 11, color: 'var(--dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.03em' }}>
-      {job.company} · <span style={{ color: 'var(--geo)' }}>{job.location || 'Singapore'}</span> · {job.platform}
+    <span className="ov-mono" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.03em', color: 'var(--dim)' }}>
+      <span style={{ color: 'var(--ink)' }}>{job.company}</span>
+      {'  ·  '}<span style={{ color: 'var(--geo)' }}>◍ {job.location || 'Singapore'}</span>
+      {'  ·  '}{job.platform}
     </span>
+  )
+}
+
+// Salary (ink mono, tabular) over a small seniority stamp — the right-aligned
+// readout column of a job row / the tailor header. Null when neither is disclosed.
+function SalaryLevel({ job, align = 'right' }: { job: Job; align?: 'right' | 'left' }) {
+  const salary = formatSalary(job)
+  const level = experienceLabel(job)
+  if (!salary && !level) return null
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: align === 'right' ? 'flex-end' : 'flex-start' }}>
+      {salary && (
+        <span className="ov-num" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{salary}</span>
+      )}
+      {level && (
+        <span className="ov-stamp ov-stamp-info" title={job.experience_raw ?? undefined} style={{ fontSize: 9 }}>{level}</span>
+      )}
+    </div>
   )
 }
 
@@ -147,6 +171,7 @@ function Home() {
   const [filters, setFilters] = useState<FilterState>(saved.filters ?? DEFAULT_FILTERS)
   const [searching, setSearching] = useState(false)
   const [pending, setPending] = useState<Set<string>>(() => new Set())
+  const [refine, setRefine] = useState<RefineState>(EMPTY_REFINE)  // client-side result refinement
   const [insights, setInsights] = useState<Insights | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [downloading, setDownloading] = useState<'resume' | 'cover' | null>(null)
@@ -244,7 +269,7 @@ function Home() {
 
   function clearResults() {
     setJobs([]); setInsights(null); setPending(new Set()); setInterpreted(null)
-    setProgress(null); setFloor(false)
+    setProgress(null); setFloor(false); setRefine(EMPTY_REFINE)
     try { localStorage.removeItem(SEARCH_KEY) } catch { /* ignore */ }
   }
 
@@ -273,7 +298,7 @@ function Home() {
     enrichAbort.current?.abort()
     const ac = new AbortController()
     searchAbort.current = ac
-    setSearching(true); setPending(new Set()); setJobs([]); setInterpreted(null); setInsights(null)
+    setSearching(true); setPending(new Set()); setJobs([]); setInterpreted(null); setInsights(null); setRefine(EMPTY_REFINE)
     setProgress(null); setFloor(false)
     const collected: Job[] = []
     try {
@@ -486,7 +511,7 @@ function Home() {
                   )}
 
                   {/* results table */}
-                  <ResultsTable jobs={jobs} pending={pending} allFits={allFits} onOpen={openJob} />
+                  <ResultsTable jobs={jobs} pending={pending} allFits={allFits} onOpen={openJob} refine={refine} setRefine={setRefine} />
                 </div>
               ) : (
                 <PasteJd url={url} setUrl={setUrl} jd={jd} setJd={setJd} fetchingUrl={fetchingUrl} onFetchUrl={onFetchUrl} onTailor={openPasteJd} tailoring={tailoring} />
@@ -647,27 +672,94 @@ function FilterRows({ filters, setDate, setMax, toggleFilter }: {
   )
 }
 
+// ---- refine bar (client-side, over the already-fetched results) ------------
+
+const MIN_SALARY_OPTS = [0, 3000, 5000, 8000, 10000]
+const TIER_OPTS: [Tier, string][] = [
+  ['top', 'top fit'], ['strong', 'strong'], ['moderate', 'moderate'], ['weak', 'weak'], ['unrated', 'unrated'],
+]
+
+function RefineBar({ jobs, allFits, refine, setRefine, visibleCount }: {
+  jobs: Job[]; allFits: number[]; refine: RefineState; setRefine: (u: RefineState) => void; visibleCount: number
+}) {
+  const levelsPresent = LEVEL_ORDER.filter((l) => jobs.some((j) => j.experience_level === l))
+  const platformsPresent = [...new Set(jobs.map((j) => j.platform))]
+  const tiersPresent = TIER_OPTS.filter(([t]) => jobs.some((j) => jobTier(j, allFits) === t))
+  const anySalary = jobs.some(hasSalary)
+  const active = refineActive(refine)
+
+  const toggle = (key: 'levels' | 'platforms', v: string) =>
+    setRefine({ ...refine, [key]: refine[key].includes(v) ? refine[key].filter((x) => x !== v) : [...refine[key], v] })
+  const toggleTier = (t: Tier) =>
+    setRefine({ ...refine, tiers: refine.tiers.includes(t) ? refine.tiers.filter((x) => x !== t) : [...refine.tiers, t] })
+
+  return (
+    <div style={{ borderBottom: '2px solid var(--ink)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', background: 'var(--panel)', borderBottom: '1px solid var(--rule)' }}>
+        <span className="ov-micro" style={{ fontSize: 9 }}>refine these results · {visibleCount} of {jobs.length} shown</span>
+        {active && <button onClick={() => setRefine(EMPTY_REFINE)} className="ov-micro" style={{ fontSize: 9, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)' }}>reset ✕</button>}
+      </div>
+      {levelsPresent.length > 0 && (
+        <FilterRow label="experience">
+          {levelsPresent.map((l) => <FilterBtn key={l} active={refine.levels.includes(l)} onClick={() => toggle('levels', l)}>{levelLabel(l)}</FilterBtn>)}
+        </FilterRow>
+      )}
+      {platformsPresent.length > 1 && (
+        <FilterRow label="board">
+          {platformsPresent.map((p) => <FilterBtn key={p} active={refine.platforms.includes(p)} onClick={() => toggle('platforms', p)}>{p}</FilterBtn>)}
+        </FilterRow>
+      )}
+      {tiersPresent.length > 1 && (
+        <FilterRow label="fit">
+          {tiersPresent.map(([t, label]) => <FilterBtn key={t} active={refine.tiers.includes(t)} onClick={() => toggleTier(t)}>{label}</FilterBtn>)}
+        </FilterRow>
+      )}
+      {anySalary && (
+        <FilterRow label="salary">
+          <FilterBtn active={refine.hasSalaryOnly} onClick={() => setRefine({ ...refine, hasSalaryOnly: !refine.hasSalaryOnly })}>disclosed</FilterBtn>
+          {MIN_SALARY_OPTS.map((n) => (
+            <FilterBtn key={n} active={refine.minSalary === n} onClick={() => setRefine({ ...refine, minSalary: n })}>
+              {n === 0 ? 'any' : `${n / 1000}k+/mo`}
+            </FilterBtn>
+          ))}
+        </FilterRow>
+      )}
+    </div>
+  )
+}
+
 // ---- results table ---------------------------------------------------------
 
-function ResultsTable({ jobs, pending, allFits, onOpen }: { jobs: Job[]; pending: Set<string>; allFits: number[]; onOpen: (j: Job) => void }) {
-  const shown = jobs.filter((job) => !pending.has(jobKey(job)))
-  if (!shown.length) return null
+function ResultsTable({ jobs, pending, allFits, onOpen, refine, setRefine }: {
+  jobs: Job[]; pending: Set<string>; allFits: number[]; onOpen: (j: Job) => void
+  refine: RefineState; setRefine: (u: RefineState) => void
+}) {
+  const scored = jobs.filter((job) => !pending.has(jobKey(job)))
+  if (!scored.length) return null
+  const visible = applyRefine(scored, refine, allFits)
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 116px', background: 'var(--panel)', borderBottom: '1px solid var(--rule)' }}>
-        {['#', 'role', 'verdict'].map((h) => <span key={h} className="ov-micro" style={{ fontSize: 9, padding: '8px 12px' }}>{h}</span>)}
+      <RefineBar jobs={scored} allFits={allFits} refine={refine} setRefine={setRefine} visibleCount={visible.length} />
+      <div className="ov-jobrow" style={{ background: 'var(--panel)', borderBottom: '1px solid var(--rule)' }}>
+        <span className="ov-micro ov-jobrow-idx" style={{ fontSize: 9, padding: '8px 12px' }}>#</span>
+        <span className="ov-micro ov-jobrow-role" style={{ fontSize: 9, padding: '8px 12px' }}>role</span>
+        <span className="ov-micro ov-jobrow-salary" style={{ fontSize: 9, padding: '8px 12px', textAlign: 'right' }}>salary</span>
+        <span className="ov-micro ov-jobrow-verdict" style={{ fontSize: 9, padding: '8px 12px' }}>verdict</span>
       </div>
-      {shown.map((job, idx) => {
+      {visible.length === 0 ? (
+        <div className="ov-micro" style={{ fontSize: 9, padding: '16px 20px', color: 'var(--dim)' }}>no jobs match these refine filters.</div>
+      ) : visible.map((job, idx) => {
         const have = job.matched_skills ?? []
         const missing = job.missing_skills ?? []
         const total = have.length + missing.length
         return (
           <button key={jobKey(job)} onClick={() => onOpen(job)}
-            style={{ display: 'grid', gridTemplateColumns: '44px 1fr 116px', width: '100%', textAlign: 'left', borderBottom: '1px solid var(--rule)', borderLeft: '3px solid transparent', background: 'transparent', cursor: 'pointer', alignItems: 'center', padding: 0 }}
+            className="ov-jobrow"
+            style={{ width: '100%', textAlign: 'left', borderBottom: '1px solid var(--rule)', borderLeft: '3px solid transparent', background: 'transparent', cursor: 'pointer', padding: 0 }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hair)')}
             onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-            <span className="ov-num" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--dim)', padding: '12px' }}>{String(idx + 1).padStart(2, '0')}</span>
-            <div style={{ padding: '12px', minWidth: 0 }}>
+            <span className="ov-num ov-jobrow-idx" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--dim)', padding: '12px' }}>{String(idx + 1).padStart(2, '0')}</span>
+            <div className="ov-jobrow-role" style={{ padding: '12px', minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16, letterSpacing: '-0.015em', color: 'var(--ink)', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
               <div style={{ marginTop: 4 }}><JobMeta job={job} /></div>
               {total > 0 ? (
@@ -676,7 +768,8 @@ function ResultsTable({ jobs, pending, allFits, onOpen }: { jobs: Job[]; pending
                 <div className="ov-micro" style={{ fontSize: 9, color: 'var(--gap)', marginTop: 6 }}>no description returned · open to fetch</div>
               )}
             </div>
-            <div style={{ padding: '12px' }}>
+            <div className="ov-jobrow-salary" style={{ padding: '12px', textAlign: 'right' }}><SalaryLevel job={job} /></div>
+            <div className="ov-jobrow-verdict" style={{ padding: '12px' }}>
               {job.below_threshold ? <span className="ov-stamp ov-stamp-moderate">closest</span>
                 : job.fit != null ? <FitBadge fit={job.fit} allFits={allFits} />
                 : <span className="ov-stamp" style={{ border: '1.5px dashed var(--dim)', color: 'var(--dim)' }}>unrated</span>}
@@ -805,6 +898,9 @@ function StageTailor(p: TailorProps) {
         <div style={{ padding: '14px 20px', flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 24, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.15 }}>{j?.title ?? 'Pasted job description'}</div>
           {j && <div style={{ marginTop: 4 }}><JobMeta job={j} /></div>}
+          {j && (formatSalary(j) || experienceLabel(j)) && (
+            <div style={{ marginTop: 8 }}><SalaryLevel job={j} align="left" /></div>
+          )}
         </div>
         {j?.url && j.url !== '#' && (
           <a href={j.url} target="_blank" rel="noreferrer" className="ov-mono" style={{ borderLeft: '2px solid var(--ink)', padding: '0 20px', display: 'flex', alignItems: 'center', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', textDecoration: 'none' }}>original ↗</a>
