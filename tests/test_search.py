@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from src import search as job_search
-from src.scrapers.base import DiscoveredJob
+from src.scrapers.base import DiscoveredJob, JobDetail
 
 
 class _FakeScraper:
@@ -143,9 +143,10 @@ async def test_search_can_opt_into_eager_descriptions(monkeypatch):
 @pytest.mark.asyncio
 async def test_enrich_streams_updates_and_splits_skills(monkeypatch):
     monkeypatch.setattr("src.browser.browserbase.enabled", lambda: False)  # force httpx path
-    async def fake_desc(self, client, job_id):
-        return "We need Python and Docker experience."
-    monkeypatch.setattr("src.scrapers.linkedin.LinkedInGuestScraper._fetch_description", fake_desc)
+    async def fake_detail(self, client, job_id):
+        return JobDetail(description="We need Python and Docker experience.",
+                         experience_raw="Mid-Senior level", experience_level="mid_senior")
+    monkeypatch.setattr("src.scrapers.linkedin.LinkedInGuestScraper._fetch_detail", fake_detail)
     monkeypatch.setattr("random.uniform", lambda *a: 0)  # no polite sleep in tests
 
     jobs = [{"platform": "linkedin", "external_id": "1", "url": "http://x/1", "title": "AI Engineer"}]
@@ -155,6 +156,7 @@ async def test_enrich_streams_updates_and_splits_skills(monkeypatch):
     assert u["external_id"] == "1" and u["has_description"] is True
     assert "Python" in u["matched_skills"]       # in the CV
     assert "Docker" in u["missing_skills"]        # wanted, not in the CV
+    assert u["experience_level"] == "mid_senior"  # seniority from the detail page
 
 
 @pytest.mark.asyncio
@@ -164,14 +166,16 @@ async def test_enrich_routes_linkedin_through_browserbase_when_enabled(monkeypat
 
     async def fake_bb(items):
         for j in items:
-            yield j, "We need Python and Kubernetes."
-    monkeypatch.setattr(bbmod, "fetch_linkedin_descriptions", fake_bb)
+            yield j, JobDetail(description="We need Python and Kubernetes.",
+                               salary_min=9000, salary_max=12000, salary_period="monthly")
+    monkeypatch.setattr(bbmod, "fetch_linkedin_details", fake_bb)
 
     jobs = [{"platform": "linkedin", "external_id": "1", "url": "u", "title": "AI Engineer"}]
     updates = [u async for u in job_search.enrich_descriptions_stream(jobs, master_cv="Python dev")]
     assert len(updates) == 1 and updates[0]["has_description"] is True
     assert "Python" in updates[0]["matched_skills"]
     assert "Kubernetes" in updates[0]["missing_skills"]
+    assert updates[0]["salary_max"] == 12000       # salary read off the detail page
 
 
 @pytest.mark.asyncio
@@ -187,8 +191,20 @@ async def test_enrich_skips_cards_that_already_have_descriptions(monkeypatch):
 async def test_fetch_job_description_dispatch(monkeypatch):
     monkeypatch.setattr("src.browser.browserbase.enabled", lambda: False)  # force guest path
     async def fake_li(external_id):
-        return f"LI desc for {external_id}"
-    monkeypatch.setattr("src.scrapers.linkedin.LinkedInGuestScraper.fetch_one", staticmethod(fake_li))
+        return JobDetail(description=f"LI desc for {external_id}")
+    monkeypatch.setattr("src.scrapers.linkedin.LinkedInGuestScraper.fetch_one_detail", staticmethod(fake_li))
     assert await job_search.fetch_job_description("linkedin", "123", "http://x") == "LI desc for 123"
     # Unknown platform → empty, never raises.
     assert await job_search.fetch_job_description("nope", "", "") == ""
+
+
+@pytest.mark.asyncio
+async def test_fetch_job_detail_surfaces_salary_and_experience(monkeypatch):
+    monkeypatch.setattr("src.browser.browserbase.enabled", lambda: False)  # force guest path
+    async def fake_li(external_id):
+        return JobDetail(description="d", salary_min=8000, salary_max=10000,
+                         salary_period="monthly", experience_raw="Associate",
+                         experience_level="associate")
+    monkeypatch.setattr("src.scrapers.linkedin.LinkedInGuestScraper.fetch_one_detail", staticmethod(fake_li))
+    detail = await job_search.fetch_job_detail("linkedin", "123", "http://x")
+    assert detail.salary_max == 10000 and detail.experience_level == "associate"

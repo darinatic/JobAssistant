@@ -127,6 +127,13 @@ class JobDescriptionResponse(BaseModel):
     missing_skills: list[str] = Field(default_factory=list)
     relevance: int = 0
     fit: int | None = None  # learned fit 0-100 when the predictor is enabled
+    # Salary/seniority read off the detail page (LinkedIn) — present when disclosed.
+    salary_min: int | None = None
+    salary_max: int | None = None
+    salary_period: str | None = None
+    salary_raw: str | None = None
+    experience_raw: str | None = None
+    experience_level: str | None = None
 
 
 class RedFlagsRequest(BaseModel):
@@ -368,7 +375,8 @@ async def job_description(req: JobDescriptionRequest) -> JobDescriptionResponse:
     Search returns LinkedIn/JobStreet cards without descriptions to stay fast; the
     drawer calls this to fill one in, then (with a CV) re-derives the skill overlap.
     """
-    text = await job_search.fetch_job_description(req.platform, req.external_id, req.url)
+    detail = await job_search.fetch_job_detail(req.platform, req.external_id, req.url)
+    text = detail.description
     have: list[str] = []
     missing: list[str] = []
     relevance = 0
@@ -384,6 +392,9 @@ async def job_description(req: JobDescriptionRequest) -> JobDescriptionResponse:
     return JobDescriptionResponse(
         description=text, has_description=bool(text.strip()),
         matched_skills=have, missing_skills=missing, relevance=relevance, fit=fit,
+        salary_min=detail.salary_min, salary_max=detail.salary_max,
+        salary_period=detail.salary_period, salary_raw=detail.salary_raw,
+        experience_raw=detail.experience_raw, experience_level=detail.experience_level,
     )
 
 

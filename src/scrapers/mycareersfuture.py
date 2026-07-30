@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.parsing import normalize_experience
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -131,6 +132,17 @@ class MyCareersFutureScraper(JobScraper):
         location = ", ".join(filter(None, location_parts)) or "Singapore"
 
         salary = job.get("salary") or {}
+        salary_min = salary.get("minimum")
+        salary_max = salary.get("maximum")
+        salary_period = self._salary_period(salary)
+        salary_raw = self._salary_raw(salary_min, salary_max, salary_period)
+
+        levels = self._position_levels(job)
+        experience_raw = ", ".join(levels) or None
+        # Normalize on the primary (first) level — the joined string won't match
+        # the single-label table.
+        experience_level = normalize_experience(levels[0], self.PLATFORM) if levels else None
+
         return DiscoveredJob(
             platform=self.PLATFORM,
             external_id=uuid,
@@ -140,6 +152,39 @@ class MyCareersFutureScraper(JobScraper):
             location=location,
             description=_strip_html(job.get("description") or ""),
             posted_date=metadata.get("createdAt") or "",
-            salary_min=salary.get("minimum"),
-            salary_max=salary.get("maximum"),
+            salary_min=salary_min,
+            salary_max=salary_max,
+            salary_period=salary_period,
+            salary_raw=salary_raw,
+            experience_raw=experience_raw,
+            experience_level=experience_level,
         )
+
+    @staticmethod
+    def _salary_period(salary: dict) -> str | None:
+        # salary.type.salaryType is "Monthly" / "Annually" (verified live).
+        raw = ((salary.get("type") or {}).get("salaryType") or "").strip().lower()
+        if raw.startswith("month"):
+            return "monthly"
+        if raw.startswith(("annual", "year")):
+            return "annual"
+        return None
+
+    @staticmethod
+    def _salary_raw(lo: int | None, hi: int | None, period: str | None) -> str | None:
+        if lo is None and hi is None:
+            return None
+        suffix = {"monthly": "/mo", "annual": "/yr"}.get(period or "", "")
+        if lo is not None and hi is not None:
+            return f"${lo:,} - ${hi:,}{suffix}"
+        val = lo if lo is not None else hi
+        return f"${val:,}{suffix}"
+
+    @staticmethod
+    def _position_levels(job: dict) -> list[str]:
+        levels = job.get("positionLevels") or []
+        return [
+            (lvl.get("position") or "").strip()
+            for lvl in levels
+            if isinstance(lvl, dict) and (lvl.get("position") or "").strip()
+        ]

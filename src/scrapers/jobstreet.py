@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 
 from src.browser.stealth import HumanBehavior, StealthBrowser
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.parsing import parse_salary
 
 # JobStreet's URL slug convention: lowercase, hyphen-separated.
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -125,6 +126,11 @@ class JobStreetScraper(JobScraper):
         location = await self._text(card, '[data-automation="jobLocation"], [data-automation="jobCardLocation"]')
         posted = await self._text(card, 'span[data-automation="jobListingDate"]')
 
+        # Salary sits on the card ('jobSalary', e.g. "$7,000 - $8,000 per month").
+        # JobStreet exposes no seniority field, so experience stays None.
+        salary_raw = await self._text(card, '[data-automation="jobSalary"]')
+        salary_min, salary_max, salary_period = parse_salary(salary_raw)
+
         return DiscoveredJob(
             platform=self.PLATFORM,
             external_id=external_id,
@@ -134,8 +140,10 @@ class JobStreetScraper(JobScraper):
             location=location or "Singapore",
             posted_date=posted,
             description="",  # filled in by _fetch_description
-            salary_min=None,
-            salary_max=None,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            salary_period=salary_period,
+            salary_raw=salary_raw or None,
         ) if external_id else None
 
     async def _fetch_description(self, browser: StealthBrowser, job_url: str) -> str:

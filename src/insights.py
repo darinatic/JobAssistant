@@ -9,6 +9,7 @@ deterministic and free.
 from collections import Counter
 
 from src.matching import extract_skills, rough_relevance
+from src.scrapers.parsing import monthly_value
 
 
 def aggregate_jobs(jobs: list[dict], master_cv: str | None = None, top_n: int = 20) -> dict:
@@ -39,9 +40,10 @@ def aggregate_jobs(jobs: list[dict], master_cv: str | None = None, top_n: int = 
             "strong_matches": sum(1 for r in rels if r >= 60),  # jobs you match >= 60%
         }
 
-    # Salary range across jobs that disclose one.
-    mins = [j["salary_min"] for j in jobs if j.get("salary_min")]
-    maxs = [j["salary_max"] for j in jobs if j.get("salary_max")]
+    # Salary range across jobs that disclose one — normalized to a monthly SGD
+    # value first so annual figures (LinkedIn/JobStreet) don't corrupt the range.
+    mins = [monthly_value(j["salary_min"], j.get("salary_period")) for j in jobs if j.get("salary_min")]
+    maxs = [monthly_value(j["salary_max"], j.get("salary_period")) for j in jobs if j.get("salary_max")]
     salary = {"min": min(mins) if mins else None, "max": max(maxs) if maxs else None,
               "disclosed": len(mins) + len(maxs)} if (mins or maxs) else None
 

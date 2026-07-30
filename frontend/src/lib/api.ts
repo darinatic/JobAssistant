@@ -79,6 +79,10 @@ export interface Job {
   posted_date?: string
   salary_min?: number | null
   salary_max?: number | null
+  salary_period?: string | null      // 'monthly' | 'annual' | null
+  salary_raw?: string | null          // verbatim board string, display fallback
+  experience_raw?: string | null      // board's seniority label, e.g. "Mid-Senior level"
+  experience_level?: string | null    // normalized bucket (entry_level..executive)
 }
 
 export interface SearchFilters {
@@ -203,7 +207,11 @@ export const api = {
   insights: (body: { jobs: Job[]; resume_markdown?: string }) => postJson<Insights>('/insights', body),
 
   jobDescription: (body: { platform: string; external_id?: string; url?: string; title?: string; resume_markdown?: string }) =>
-    postJson<{ description: string; has_description: boolean; matched_skills: string[]; missing_skills: string[]; relevance: number; fit?: number }>('/job/description', body),
+    postJson<{
+      description: string; has_description: boolean; matched_skills: string[]; missing_skills: string[]; relevance: number; fit?: number
+      salary_min?: number | null; salary_max?: number | null; salary_period?: string | null; salary_raw?: string | null
+      experience_raw?: string | null; experience_level?: string | null
+    }>('/job/description', body),
 
   tailor: (body: {
     jd_text: string

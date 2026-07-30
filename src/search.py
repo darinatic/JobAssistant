@@ -13,7 +13,7 @@ from dataclasses import asdict
 
 from src.matching import extract_skills
 from src.scrapers import SearchParams, build_scraper
-from src.scrapers.base import DiscoveredJob
+from src.scrapers.base import DiscoveredJob, JobDetail
 from src.utils.config import settings
 
 log = logging.getLogger(__name__)
@@ -323,30 +323,50 @@ async def search_jobs_gated_stream(
                 break
 
 
-async def fetch_job_description(platform: str, external_id: str, url: str) -> str:
-    """On-demand single-job description fetch — called when a job is opened.
+async def fetch_job_detail(platform: str, external_id: str, url: str) -> JobDetail:
+    """On-demand single-job DETAIL fetch — description plus any salary/seniority.
 
     Search returns LinkedIn/JobStreet cards without descriptions (to stay fast and
-    dodge LinkedIn's burst wall); this fills one in on request. MCF descriptions are
-    already inline, so this is only a fallback there.
+    dodge LinkedIn's burst wall); this fills one in on request. LinkedIn salary +
+    seniority live only on the detail page, so this is where they populate. MCF and
+    JobStreet salary are already captured at search time.
     """
     platform = (platform or "").lower()
     try:
         if platform == "linkedin":
             from src.browser import browserbase as bb
             if bb.enabled():
-                return await bb.fetch_one_linkedin(external_id)
+                return await bb.fetch_one_linkedin_detail(external_id)
             from src.scrapers.linkedin import LinkedInGuestScraper
-            return await LinkedInGuestScraper.fetch_one(external_id)
+            return await LinkedInGuestScraper.fetch_one_detail(external_id)
         if platform == "jobstreet":
             from src.scrapers.jobstreet import JobStreetScraper
-            return await JobStreetScraper.fetch_one(url)
+            return JobDetail(description=await JobStreetScraper.fetch_one(url))
         if platform == "mycareersfuture":
             from src.jd_extract import extract_jd_from_url
-            return await extract_jd_from_url(url)
+            return JobDetail(description=await extract_jd_from_url(url))
     except Exception as e:
-        log.warning("On-demand description fetch failed (%s): %s", platform, e)
-    return ""
+        log.warning("On-demand detail fetch failed (%s): %s", platform, e)
+    return JobDetail()
+
+
+async def fetch_job_description(platform: str, external_id: str, url: str) -> str:
+    """Description-only wrapper (gated-search scoring path needs text only)."""
+    return (await fetch_job_detail(platform, external_id, url)).description
+
+
+def _detail_fields(detail: JobDetail) -> dict:
+    """The salary/experience fields of a detail fetch that are actually present —
+    so an enrichment patch fills them in without clobbering existing card values."""
+    fields = {
+        "salary_min": detail.salary_min,
+        "salary_max": detail.salary_max,
+        "salary_period": detail.salary_period,
+        "salary_raw": detail.salary_raw,
+        "experience_raw": detail.experience_raw,
+        "experience_level": detail.experience_level,
+    }
+    return {k: v for k, v in fields.items() if v is not None}
 
 
 def _skill_update(job: dict, description: str, cv_skills: set[str] | None) -> dict:
@@ -385,11 +405,12 @@ async def enrich_descriptions_stream(
 
     queue: asyncio.Queue = asyncio.Queue()
 
-    async def _update(job: dict, desc: str) -> dict:
-        upd = _skill_update(job, desc, cv_skills)
-        fit = await _fit_pct(master_cv, job.get("title", ""), desc)
+    async def _update(job: dict, detail: JobDetail) -> dict:
+        upd = _skill_update(job, detail.description, cv_skills)
+        fit = await _fit_pct(master_cv, job.get("title", ""), detail.description)
         if fit is not None:
             upd["fit"] = fit
+        upd.update(_detail_fields(detail))  # salary/seniority read off the detail page
         return upd
 
     async def run_linkedin(items: list[dict]) -> None:
@@ -397,8 +418,8 @@ async def enrich_descriptions_stream(
         try:
             # Preferred: proxied cloud browser gets past LinkedIn's guest IP wall.
             if bb.enabled():
-                async for job, desc in bb.fetch_linkedin_descriptions(items):
-                    await queue.put(await _update(job, desc))
+                async for job, detail in bb.fetch_linkedin_details(items):
+                    await queue.put(await _update(job, detail))
                 return
             # Free fallback: guest httpx loop — walls after ~5-10 jobs.
             import random
@@ -410,10 +431,10 @@ async def enrich_descriptions_stream(
             async with httpx.AsyncClient(timeout=30.0, headers=_DEFAULT_HEADERS, follow_redirects=True) as client:
                 for job in items:
                     try:
-                        desc = await s._fetch_description(client, job.get("external_id", ""))
+                        detail = await s._fetch_detail(client, job.get("external_id", ""))
                     except Exception:
-                        desc = ""
-                    await queue.put(await _update(job, desc))
+                        detail = JobDetail()
+                    await queue.put(await _update(job, detail))
                     await asyncio.sleep(random.uniform(2.0, 5.0))  # ease off LinkedIn's rate wall
         finally:
             await queue.put(_SENTINEL)
@@ -429,7 +450,9 @@ async def enrich_descriptions_stream(
                         desc = await s._fetch_description(browser, job.get("url", ""))
                     except Exception:
                         desc = ""
-                    await queue.put(await _update(job, desc))
+                    # JobStreet salary is captured on the card at search time, so the
+                    # detail fetch only backfills the description.
+                    await queue.put(await _update(job, JobDetail(description=desc)))
                     await HumanBehavior.random_delay(1200, 2500)
         finally:
             await queue.put(_SENTINEL)
@@ -437,8 +460,8 @@ async def enrich_descriptions_stream(
     async def run_other(platform: str, items: list[dict]) -> None:
         try:
             for job in items:
-                desc = await fetch_job_description(platform, job.get("external_id", ""), job.get("url", ""))
-                await queue.put(await _update(job, desc))
+                detail = await fetch_job_detail(platform, job.get("external_id", ""), job.get("url", ""))
+                await queue.put(await _update(job, detail))
         finally:
             await queue.put(_SENTINEL)
 

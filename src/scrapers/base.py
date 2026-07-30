@@ -37,6 +37,27 @@ class DiscoveredJob:
     posted_date: str = ""  # ISO-ish or human-readable, scraper-specific
     salary_min: int | None = None
     salary_max: int | None = None
+    salary_period: str | None = None    # 'monthly' | 'annual' | None
+    salary_raw: str | None = None        # verbatim board string, display fallback
+    experience_raw: str | None = None    # what the board says, e.g. "Mid-Senior level"
+    experience_level: str | None = None  # normalized bucket (see parsing.normalize_experience)
+
+
+@dataclass
+class JobDetail:
+    """Structured result of a per-job DETAIL fetch (LinkedIn/JobStreet detail page).
+
+    Carries the description plus any salary/experience read off the detail page, so
+    the on-demand + enrich paths can surface them. Description-only callers (the
+    gated-search scoring pool) just take ``.description``.
+    """
+    description: str = ""
+    salary_min: int | None = None
+    salary_max: int | None = None
+    salary_period: str | None = None
+    salary_raw: str | None = None
+    experience_raw: str | None = None
+    experience_level: str | None = None
 
 
 class JobScraper(Protocol):

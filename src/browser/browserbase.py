@@ -17,12 +17,15 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from src.scrapers.base import JobDetail
+from src.scrapers.parsing import normalize_experience, parse_salary
 from src.utils.config import settings
 
 log = logging.getLogger(__name__)
 
 _LINKEDIN_VIEW = "https://www.linkedin.com/jobs/view/{job_id}/"
 _DESC_SELECTORS = ["div.show-more-less-html__markup", "div.description__text"]
+_SALARY_SELECTORS = ["div.salary", "div.compensation__salary", ".compensation__salary-range"]
 
 
 def enabled() -> bool:
@@ -75,34 +78,73 @@ async def _connected_page() -> AsyncIterator[object]:
             await release_session(bb, session)
 
 
-async def fetch_linkedin_descriptions(jobs: list[dict]) -> AsyncIterator[tuple[dict, str]]:
-    """Yield ``(job, description)`` for each LinkedIn job, via one proxied cloud browser.
+async def _read_detail(page) -> JobDetail:
+    """Read description + salary + seniority off an already-navigated LinkedIn page."""
+    description = ""
+    for sel in _DESC_SELECTORS:
+        el = await page.query_selector(sel)
+        if el:
+            description = (await el.inner_text()).strip()
+            break
 
-    Never raises — on a session/page failure it yields empty descriptions so the
-    caller's enrichment still completes (and falls back gracefully).
+    salary_raw = None
+    for sel in _SALARY_SELECTORS:
+        el = await page.query_selector(sel)
+        if el:
+            text = (await el.inner_text()).strip()
+            if text:
+                salary_raw = text
+                break
+    salary_min, salary_max, salary_period = parse_salary(salary_raw)
+
+    experience_raw = None
+    for item in await page.query_selector_all("li.description__job-criteria-item"):
+        head = await item.query_selector("h3.description__job-criteria-subheader")
+        value = await item.query_selector("span.description__job-criteria-text")
+        if head and value and "seniority level" in (await head.inner_text()).strip().lower():
+            experience_raw = (await value.inner_text()).strip() or None
+            break
+
+    return JobDetail(
+        description=description,
+        salary_min=salary_min,
+        salary_max=salary_max,
+        salary_period=salary_period,
+        salary_raw=salary_raw,
+        experience_raw=experience_raw,
+        experience_level=normalize_experience(experience_raw, "linkedin"),
+    )
+
+
+async def fetch_linkedin_details(jobs: list[dict]) -> AsyncIterator[tuple[dict, JobDetail]]:
+    """Yield ``(job, JobDetail)`` for each LinkedIn job, via one proxied cloud browser.
+
+    Never raises — on a session/page failure it yields empty details so the caller's
+    enrichment still completes (and falls back gracefully).
     """
     try:
         async with _connected_page() as page:
             for job in jobs:
-                desc = ""
+                detail = JobDetail()
                 try:
-                    job_id = job.get("external_id", "")
                     await page.goto(
-                        _LINKEDIN_VIEW.format(job_id=job_id),
+                        _LINKEDIN_VIEW.format(job_id=job.get("external_id", "")),
                         wait_until="domcontentloaded", timeout=30000,
                     )
-                    for sel in _DESC_SELECTORS:
-                        el = await page.query_selector(sel)
-                        if el:
-                            desc = (await el.inner_text()).strip()
-                            break
+                    detail = await _read_detail(page)
                 except Exception as e:
                     log.warning("Browserbase LinkedIn fetch failed (%s): %s", job.get("external_id"), e)
-                yield job, desc
+                yield job, detail
     except Exception as e:
         log.warning("Browserbase session unavailable, skipping: %s", e)
         for job in jobs:
-            yield job, ""
+            yield job, JobDetail()
+
+
+async def fetch_linkedin_descriptions(jobs: list[dict]) -> AsyncIterator[tuple[dict, str]]:
+    """Backward-compatible description-only variant (scoring path needs text only)."""
+    async for job, detail in fetch_linkedin_details(jobs):
+        yield job, detail.description
 
 
 async def fetch_one_linkedin(job_id: str) -> str:
@@ -112,5 +154,10 @@ async def fetch_one_linkedin(job_id: str) -> str:
     return aclose()s it mid-flight, which runs the Playwright/session teardown during
     generator finalization and hangs on the Windows Proactor loop.
     """
-    out = [desc async for _job, desc in fetch_linkedin_descriptions([{"external_id": job_id}])]
-    return out[0] if out else ""
+    return (await fetch_one_linkedin_detail(job_id)).description
+
+
+async def fetch_one_linkedin_detail(job_id: str) -> JobDetail:
+    """Single-job DETAIL fetch (description + salary + seniority) via cloud browser."""
+    out = [d async for _job, d in fetch_linkedin_details([{"external_id": job_id}])]
+    return out[0] if out else JobDetail()

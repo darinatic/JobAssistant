@@ -184,8 +184,12 @@ def test_red_flags_endpoint_clean(client):
 
 
 def test_job_description_includes_fit_when_predictor_on(client):
-    with patch("src.api.job_search.fetch_job_description",
-               new=AsyncMock(return_value="AI Engineer building RAG pipelines in PyTorch")), \
+    from src.scrapers.base import JobDetail
+    with patch("src.api.job_search.fetch_job_detail",
+               new=AsyncMock(return_value=JobDetail(
+                   description="AI Engineer building RAG pipelines in PyTorch",
+                   salary_min=9000, salary_max=12000, salary_period="monthly",
+                   experience_raw="Mid-Senior level", experience_level="mid_senior"))), \
          patch("src.api.job_search._fit_pct", new=AsyncMock(return_value=42)):
         r = client.post("/job/description", json={
             "platform": "linkedin", "external_id": "1", "title": "AI Engineer",
@@ -194,11 +198,15 @@ def test_job_description_includes_fit_when_predictor_on(client):
     body = r.json()
     assert body["has_description"] is True
     assert body["fit"] == 42
+    # Detail-page salary/seniority are surfaced through the endpoint.
+    assert body["salary_max"] == 12000
+    assert body["experience_level"] == "mid_senior"
 
 
 def test_job_description_fit_none_when_predictor_off(client):
-    with patch("src.api.job_search.fetch_job_description",
-               new=AsyncMock(return_value="AI Engineer RAG PyTorch")), \
+    from src.scrapers.base import JobDetail
+    with patch("src.api.job_search.fetch_job_detail",
+               new=AsyncMock(return_value=JobDetail(description="AI Engineer RAG PyTorch"))), \
          patch("src.api.job_search._fit_pct", new=AsyncMock(return_value=None)):
         r = client.post("/job/description", json={
             "platform": "linkedin", "external_id": "1", "title": "AI Engineer",

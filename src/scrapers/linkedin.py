@@ -21,7 +21,8 @@ from collections.abc import AsyncIterator
 import httpx
 from bs4 import BeautifulSoup
 
-from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.base import DiscoveredJob, JobDetail, JobScraper, SearchParams
+from src.scrapers.parsing import normalize_experience, parse_salary
 
 SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
@@ -98,9 +99,14 @@ class LinkedInGuestScraper(JobScraper):
                     # Bursting the detail endpoint is what trips LinkedIn's soft-wall,
                     # so search defers this to an on-demand fetch (see fetch_one).
                     if params.fetch_descriptions:
-                        parsed.description = await self._fetch_description(
-                            client, parsed.external_id
-                        )
+                        detail = await self._fetch_detail(client, parsed.external_id)
+                        parsed.description = detail.description
+                        parsed.salary_min = detail.salary_min
+                        parsed.salary_max = detail.salary_max
+                        parsed.salary_period = detail.salary_period
+                        parsed.salary_raw = detail.salary_raw
+                        parsed.experience_raw = detail.experience_raw
+                        parsed.experience_level = detail.experience_level
                     yield parsed
                     yielded += 1
 
@@ -171,21 +177,78 @@ class LinkedInGuestScraper(JobScraper):
     @classmethod
     async def fetch_one(cls, external_id: str) -> str:
         """On-demand single-job description fetch (used when a job is opened)."""
+        return (await cls.fetch_one_detail(external_id)).description
+
+    @classmethod
+    async def fetch_one_detail(cls, external_id: str) -> JobDetail:
+        """On-demand single-job DETAIL fetch — description + salary + seniority."""
         self = cls()
         async with httpx.AsyncClient(
             timeout=30.0, headers=_DEFAULT_HEADERS, follow_redirects=True
         ) as client:
-            return await self._fetch_description(client, external_id)
+            return await self._fetch_detail(client, external_id)
 
     async def _fetch_description(self, client: httpx.AsyncClient, job_id: str) -> str:
+        """Backward-compatible string fetch — the detail's description only."""
+        return (await self._fetch_detail(client, job_id)).description
+
+    async def _fetch_detail(self, client: httpx.AsyncClient, job_id: str) -> JobDetail:
         try:
             resp = await client.get(DETAIL_URL.format(job_id=urllib.parse.quote(job_id)))
             if resp.status_code != 200:
-                return ""
-            soup = BeautifulSoup(resp.text, "html.parser")
-            desc = soup.select_one("div.show-more-less-html__markup") or soup.select_one(
-                "div.description__text"
-            )
-            return desc.get_text("\n", strip=True) if desc else ""
+                return JobDetail()
+            return self._parse_detail(resp.text)
         except Exception:
-            return ""
+            return JobDetail()
+
+    def _parse_detail(self, html: str) -> JobDetail:
+        """Parse a LinkedIn guest DETAIL page: description, salary, seniority.
+
+        Salary + seniority live only on the detail page (not the search card), so
+        they populate when a job is opened / enriched, not at search time.
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        desc_el = soup.select_one("div.show-more-less-html__markup") or soup.select_one(
+            "div.description__text"
+        )
+        description = desc_el.get_text("\n", strip=True) if desc_el else ""
+
+        salary_raw = self._detail_salary(soup)
+        salary_min, salary_max, salary_period = parse_salary(salary_raw)
+
+        experience_raw = self._detail_criterion(soup, "seniority level")
+
+        return JobDetail(
+            description=description,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            salary_period=salary_period,
+            salary_raw=salary_raw,
+            experience_raw=experience_raw,
+            experience_level=normalize_experience(experience_raw, self.PLATFORM),
+        )
+
+    @staticmethod
+    def _detail_salary(soup: BeautifulSoup) -> str | None:
+        el = (
+            soup.select_one("div.salary")
+            or soup.select_one("div.compensation__salary")
+            or soup.select_one(".compensation__salary-range")
+        )
+        if el:
+            text = el.get_text(" ", strip=True)
+            if text:
+                return text
+        return None
+
+    @staticmethod
+    def _detail_criterion(soup: BeautifulSoup, label: str) -> str | None:
+        """Read a value from the 'job criteria' list by its label (case-insensitive)."""
+        for item in soup.select("li.description__job-criteria-item"):
+            head = item.select_one("h3.description__job-criteria-subheader")
+            value = item.select_one("span.description__job-criteria-text")
+            if head and value and label in head.get_text(strip=True).lower():
+                text = value.get_text(strip=True)
+                return text or None
+        return None
