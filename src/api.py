@@ -451,7 +451,7 @@ async def tailor(req: TailorRequest) -> TailorResponse:
         )
 
     tailored_md = result.tailored_resume.markdown_content if result.tailored_resume else None
-    gaps = gap_analysis(result.parsed_jd, req.resume_markdown, resume_md=tailored_md)
+    gaps = gap_analysis(result.parsed_jd, req.resume_markdown)
     have, missing = _keyword_coverage(req.jd_text, req.resume_markdown)
     # Deterministic honesty check on the output — advisory, never blocks the response.
     honesty = lint_resume(req.resume_markdown, tailored_md).as_dicts() if tailored_md else []

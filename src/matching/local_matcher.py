@@ -7,10 +7,11 @@ fallback (reused from the existing heuristic) for skills outside the gazetteer.
 
 Also exposes :func:`gap_analysis`, which splits a JD's skills into two honesty
 buckets that the tailoring phase must treat differently:
-- ``surfaceable_skills`` — present in the master CV but missing from the current
-  tailored resume → safe to suggest weaving in.
-- ``genuine_gaps`` — absent from the master CV entirely → must NEVER be injected
-  into the resume (that is fabrication); these feed the learning / skill-gap path.
+- ``surfaceable_skills`` — named by the JD AND present in the master CV → honest
+  to feature as keywords (you can back them up).
+- ``genuine_gaps`` — named by the JD but absent from the master CV entirely → must
+  NEVER be injected into the resume (that is fabrication); these feed the learning
+  / skill-gap path.
 """
 
 from dataclasses import dataclass, field
@@ -94,33 +95,27 @@ def rough_relevance(jd_text: str, master_cv: str) -> int:
 class GapAnalysis:
     """The honesty split for tailoring (see module docstring)."""
 
-    surfaceable_skills: list[str] = field(default_factory=list)  # has it, not on resume → weave in
-    genuine_gaps: list[str] = field(default_factory=list)        # lacks it → learning path, never inject
+    surfaceable_skills: list[str] = field(default_factory=list)  # JD skill you have (in CV) → honest to feature
+    genuine_gaps: list[str] = field(default_factory=list)        # JD skill you lack → learning path, never inject
 
 
-def gap_analysis(
-    parsed_jd: ParsedJobDescription,
-    master_cv: str,
-    resume_md: str | None = None,
-) -> GapAnalysis:
-    """Split the JD's skills into surfaceable (real, underused) vs genuine gaps.
+def gap_analysis(parsed_jd: ParsedJobDescription, master_cv: str) -> GapAnalysis:
+    """Partition the JD's skills by presence in the master CV.
 
-    ``resume_md`` is the *current tailored* resume; when omitted it defaults to
-    the master CV, in which case ``surfaceable_skills`` is empty (nothing is
-    hidden relative to the source of truth).
+    Every JD skill lands in exactly one bucket: ``surfaceable_skills`` if the
+    master CV demonstrates it (honest to feature as a keyword), else
+    ``genuine_gaps`` (never inject — that would be fabrication). Independent of any
+    tailored draft; the client decides which are currently in the Skills line.
     """
-    resume_text = resume_md if resume_md is not None else master_cv
-    master_lower, resume_lower = master_cv.lower(), resume_text.lower()
-    master_canon, resume_canon = extract_skills(master_cv), extract_skills(resume_text)
+    master_lower = master_cv.lower()
+    master_canon = extract_skills(master_cv)
 
     jd_skills = list(dict.fromkeys(parsed_jd.required_skills + parsed_jd.preferred_skills))
 
     result = GapAnalysis()
     for skill in jd_skills:
-        in_master = _has_skill(skill, master_canon, master_lower)
-        in_resume = _has_skill(skill, resume_canon, resume_lower)
-        if in_master and not in_resume:
+        if _has_skill(skill, master_canon, master_lower):
             result.surfaceable_skills.append(skill)
-        elif not in_master:
+        else:
             result.genuine_gaps.append(skill)
     return result

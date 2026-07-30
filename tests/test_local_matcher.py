@@ -90,21 +90,21 @@ def test_match_local_fallback_for_unlisted_skill():
 
 
 # --- gap analysis (the tailoring honesty split) -----------------------------
-def test_gap_analysis_surfaceable_vs_genuine():
+def test_gap_analysis_partitions_jd_skills_by_cv_presence():
     jd = _jd(required=["Python", "Docker", "Terraform"])
     master = "Python engineer who has used Docker in production."
-    # The tailored resume dropped Docker; Terraform was never in the master CV.
-    resume = "Python engineer focused on ML."
 
-    gaps = gap_analysis(jd, master, resume_md=resume)
-    assert "Docker" in gaps.surfaceable_skills      # has it, not on resume → weave in
-    assert "Terraform" in gaps.genuine_gaps         # never had it → learning path
-    assert "Python" not in gaps.surfaceable_skills  # already on resume
-    assert "Python" not in gaps.genuine_gaps
+    gaps = gap_analysis(jd, master)
+    # Every JD skill the CV backs is surfaceable (honest to feature), regardless
+    # of whether a tailored draft already lists it.
+    assert "Python" in gaps.surfaceable_skills
+    assert "Docker" in gaps.surfaceable_skills
+    assert "Terraform" in gaps.genuine_gaps          # never in the CV → learning path
+    assert "Terraform" not in gaps.surfaceable_skills
 
 
-def test_gap_analysis_defaults_to_master_no_surfaceable():
+def test_gap_analysis_all_backed_skills_surface():
     jd = _jd(required=["Python", "Rust"])
     gaps = gap_analysis(jd, "Python developer.")
-    assert gaps.surfaceable_skills == []       # resume == master → nothing hidden
-    assert gaps.genuine_gaps == ["Rust"]
+    assert gaps.surfaceable_skills == ["Python"]     # in the CV → honest to feature
+    assert gaps.genuine_gaps == ["Rust"]             # not in the CV → gap
