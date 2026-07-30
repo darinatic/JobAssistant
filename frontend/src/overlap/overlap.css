@@ -25,6 +25,14 @@
   --font-body: 'Geist Variable', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
+  /* Retheme reused shadcn components (the editor/preview) to the industrial
+     language: ink instead of indigo, square corners. Scoped to `.ov`, so nothing
+     outside the redesigned surfaces is affected. */
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --ring: var(--ink);
+  --radius: 0px;
+
   background: var(--surface);
   color: var(--body);
   font-family: var(--font-body);
@@ -154,6 +162,14 @@
 .ov-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; }
 .ov-col-divider { border-right: 2px solid var(--ink); }
 .ov-pad { padding: 52px 44px; }
+
+/* app stages: console + readout rail, tailor + control rail */
+.ov-searchgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+.ov-tailorgrid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+@media (max-width: 1000px) {
+  .ov-searchgrid, .ov-tailorgrid { grid-template-columns: 1fr; }
+  .ov-rail-divider { border-left: none !important; border-top: 2px solid var(--ink); }
+}
 
 @media (max-width: 1100px) {
   .ov-hero, .ov-2col { grid-template-columns: 1fr; }
