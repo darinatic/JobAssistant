@@ -1,0 +1,186 @@
+/* ============================================================================
+   Overlap — "Industrial Utility" design system (scoped).
+   Everything is scoped under `.ov` so the existing (dark) app at /app is
+   untouched. When the app redesign lands, these tokens promote to :root and
+   the `.ov` prefix drops. Radius is 0 everywhere; ink carries structure,
+   green/amber/rose carry meaning. No indigo, no gradients, no shadows.
+   ========================================================================== */
+
+.ov {
+  /* palette (oklch authored) */
+  --ink: oklch(0.15 0.01 250);
+  --dim: oklch(0.42 0.012 250);
+  --body: oklch(0.30 0.012 250);
+  --hair: oklch(0.15 0.01 250 / 0.12);
+  --rule: oklch(0.15 0.01 250 / 0.25);
+  --paper: oklch(0.97 0 0);
+  --surface: oklch(0.965 0.003 250);
+  --panel: oklch(0.15 0.01 250 / 0.04);
+  --have: oklch(0.44 0.11 155);
+  --gap: oklch(0.52 0.14 60);
+  --honesty: oklch(0.50 0.17 25);
+  --geo: oklch(0.45 0.09 215);
+
+  --font-display: 'Space Grotesk Variable', system-ui, sans-serif;
+  --font-body: 'Geist Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  background: var(--surface);
+  color: var(--body);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100%;
+}
+
+/* one instrument case: bordered centered column */
+.ov-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  border-left: 2px solid var(--ink);
+  border-right: 2px solid var(--ink);
+  background: var(--surface);
+}
+
+.ov * { box-sizing: border-box; }
+.ov h1, .ov h2, .ov h3, .ov p { margin: 0; }
+
+/* ---- type roles -------------------------------------------------------- */
+.ov-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 400;
+}
+.ov-micro {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.ov-h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 66px;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.ov-h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 42px;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.ov-lead { font-size: 17px; line-height: 1.6; color: var(--body); max-width: 520px; text-wrap: pretty; }
+.ov-copy { font-size: 16px; line-height: 1.65; color: var(--body); max-width: 520px; text-wrap: pretty; }
+.ov-copy + .ov-copy { margin-top: 16px; }
+.ov-num { font-variant-numeric: tabular-nums; }
+
+/* ---- links ------------------------------------------------------------- */
+.ov a { color: var(--ink); text-underline-offset: 2px; }
+.ov a:hover { color: var(--have); }
+
+/* ---- buttons ----------------------------------------------------------- */
+.ov-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 13px 18px;
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.12s linear, color 0.12s linear;
+}
+.ov-btn:hover { background: var(--hair); color: var(--ink); }
+.ov-btn-ink { background: var(--ink); color: var(--paper); }
+.ov-btn-ink:hover { background: var(--ink); color: var(--paper); opacity: 0.9; }
+.ov-btn-paper { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+
+/* ---- stamps (verdicts / flags) ---------------------------------------- */
+.ov-stamp {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.ov-stamp-topfit { background: var(--have); color: var(--paper); }
+.ov-stamp-strong { border: 1.5px solid var(--have); color: var(--have); }
+.ov-stamp-moderate { border: 1.5px solid var(--dim); color: var(--dim); }
+.ov-stamp-warn { background: var(--gap); color: var(--paper); }
+.ov-stamp-info { border: 1.5px solid var(--dim); color: var(--dim); }
+.ov-stamp-have { background: var(--have); color: var(--paper); }
+.ov-stamp-amber-outline { border: 1.5px solid var(--gap); color: var(--gap); }
+
+/* ---- chips ------------------------------------------------------------- */
+.ov-chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 7px;
+  margin: 0 2px 2px 0;
+  white-space: nowrap;
+}
+.ov-chip-have { background: var(--have); color: var(--paper); }
+.ov-chip-gap { border: 1px solid var(--rule); color: var(--dim); background: transparent; }
+
+/* ---- focus ------------------------------------------------------------- */
+.ov :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---- responsive layout utilities -------------------------------------- */
+.ov-hero { display: grid; grid-template-columns: 1.05fr 1fr; }
+.ov-2col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ov-3col { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.ov-col-divider { border-right: 2px solid var(--ink); }
+.ov-pad { padding: 52px 44px; }
+
+@media (max-width: 1100px) {
+  .ov-hero, .ov-2col { grid-template-columns: 1fr; }
+  .ov-col-divider { border-right: none; border-bottom: 2px solid var(--ink); }
+  /* reversed section (matching): show the text before the demo when stacked */
+  .ov-reverse > .ov-order-demo { order: 2; }
+  .ov-reverse > .ov-order-text { order: 1; }
+  .ov-h1 { font-size: 48px; }
+  .ov-h2 { font-size: 34px; }
+}
+
+@media (max-width: 760px) {
+  .ov-3col { grid-template-columns: 1fr; }
+  .ov-shell { border-left: none; border-right: none; }
+  .ov-pad { padding: 32px 20px; }
+  .ov-h1 { font-size: 36px; }
+  .ov-h2 { font-size: 30px; }
+  .ov-hide-sm { display: none !important; }
+}
+
+/* ---- keyframes (segmented progress signature) ------------------------- */
+@keyframes ov-seg  { 0%,100% { opacity: 0.3 } 50% { opacity: 1 } }
+@keyframes ov-tick { 0%,100% { opacity: 0.4 } 50% { opacity: 1 } }
+@keyframes ov-rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov *,
+  .ov *::before,
+  .ov *::after { animation: none !important; }
+}
