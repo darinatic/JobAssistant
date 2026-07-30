@@ -45,6 +45,28 @@ _MAG_RE = re.compile(r"\d+(?:\.\d+)?\s*[kmb]\b", re.IGNORECASE)
 _MONEY_RE = re.compile(r"[$€£]\s?\d[\d,]*(?:\.\d+)?")
 _BIGNUM_RE = re.compile(r"\d[\d,]{2,}")  # 100+, comma-formatted allowed
 
+# Contact info carries digits (phone, profile URLs, email) that are NOT achievement
+# metrics — strip it before the metric scan so a phone number isn't flagged as an
+# invented figure. Emails first, then URLs, then phone numbers.
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_URL_RE = re.compile(
+    r"(?:https?://|www\.)\S+"
+    r"|[\w-]+\.(?:com|org|io|dev|net|gov|sg|co|ai|me|edu|xyz)\b[/\w.#?=&%-]*",
+    re.IGNORECASE,
+)
+_PHONE_RE = re.compile(
+    r"\+\d[\d\s().-]{5,}\d"      # international: "+65 9123 4567", "+1 (415) 555-0100"
+    r"|\b\d{3,4}[\s.-]\d{4}\b",  # local grouped: "9123 4567", "9123-4567"
+)
+
+
+def _strip_contact(text: str) -> str:
+    """Remove emails, URLs, and phone numbers so their digits aren't mistaken for
+    achievement metrics (a phone number is not a fabricated 40% improvement)."""
+    text = _EMAIL_RE.sub(" ", text)
+    text = _URL_RE.sub(" ", text)
+    return _PHONE_RE.sub(" ", text)
+
 
 @dataclass(frozen=True)
 class HonestyFinding:
@@ -81,6 +103,7 @@ def _norm_metric(raw: str) -> str:
 
 
 def _metrics(text: str) -> set[str]:
+    text = _strip_contact(text)
     out: set[str] = set()
     for rx in (_PCT_RE, _MAG_RE, _MONEY_RE, _BIGNUM_RE):
         for hit in rx.findall(text):

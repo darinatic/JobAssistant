@@ -67,6 +67,25 @@ def test_flags_invented_domain():
     assert "healthcare" in domains and "fintech" in domains and "hipaa" in domains
 
 
+def test_contact_info_is_not_flagged_as_metric():
+    # A phone / email / profile URL in the header is contact info, not a fabricated
+    # achievement figure — its digits must not surface as "metric" findings.
+    tailored = _CV.replace(
+        "# Jane Tan",
+        "# Jane Tan\njane.tan@example.com | +65 9123 4567 | linkedin.com/in/janetan | github.com/janetan123",
+    )
+    report = lint_resume(_CV, tailored)
+    assert report.of("metric") == [], report.as_dicts()
+
+
+def test_real_metric_still_flagged_alongside_contact_info():
+    # Stripping contact info must not blind the check to a genuine fabricated metric.
+    tailored = _CV.replace("# Jane Tan", "# Jane Tan\n+65 9123 4567").replace(
+        "92% accuracy", "reduced costs by 40%")
+    metrics = {f.value for f in lint_resume(_CV, tailored).of("metric")}
+    assert "40%" in metrics
+
+
 def test_metric_reformatting_is_not_flagged():
     # 10k -> 10,000 and 92% -> 92 % must normalize equal (no false positive).
     tailored = _CV.replace("10k queries", "10,000 queries").replace("92% accuracy", "92 % accuracy")
