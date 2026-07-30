@@ -57,81 +57,61 @@ body {
 }
 
 /*
- * "Precision instrument" identity: a warm-neutral canvas (not the violet-tinted
- * default), a single confident indigo accent used sparingly, and explicit
- * match-state colors — emerald (have), amber (gap/missing), rose (honesty).
+ * "Industrial Utility" identity — the single global token system shared by the
+ * marketing landing (/) and the app (/app). Radius 0 everywhere; ink carries all
+ * structure; green (have) / amber (gap) / rose (honesty) carry all state meaning.
+ * No indigo, no gradients, no dark mode. Authored in oklch.
  */
 :root {
-  --background: oklch(0.994 0.002 95);
-  --foreground: oklch(0.20 0.006 265);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.20 0.006 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.20 0.006 265);
-  --primary: oklch(0.515 0.19 270);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.965 0.003 95);
-  --secondary-foreground: oklch(0.28 0.008 265);
-  --muted: oklch(0.966 0.003 95);
-  --muted-foreground: oklch(0.485 0.008 265);
-  --accent: oklch(0.95 0.02 270);
-  --accent-foreground: oklch(0.30 0.06 270);
-  --destructive: oklch(0.58 0.20 20);
-  --border: oklch(0.905 0.004 95);
-  --input: oklch(0.905 0.004 95);
-  --ring: oklch(0.515 0.19 270);
-  --have: oklch(0.56 0.13 158);
-  --gap: oklch(0.63 0.15 66);
-  --honesty: oklch(0.585 0.19 22);
-  --loc: oklch(0.55 0.09 215);
-  --radius: 0.4rem;
-  --sidebar: oklch(0.99 0.003 95);
-  --sidebar-foreground: oklch(0.20 0.006 265);
-  --sidebar-primary: oklch(0.515 0.19 270);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.95 0.02 270);
-  --sidebar-accent-foreground: oklch(0.30 0.06 270);
-  --sidebar-border: oklch(0.905 0.004 95);
-  --sidebar-ring: oklch(0.515 0.19 270);
-}
+  /* industrial palette */
+  --ink: oklch(0.15 0.01 250);
+  --dim: oklch(0.42 0.012 250);
+  --body: oklch(0.30 0.012 250);
+  --hair: oklch(0.15 0.01 250 / 0.12);
+  --rule: oklch(0.15 0.01 250 / 0.25);
+  --paper: oklch(0.97 0 0);
+  --surface: oklch(0.965 0.003 250);
+  --panel: oklch(0.15 0.01 250 / 0.04);
+  --geo: oklch(0.45 0.09 215);
+  --font-body: 'Geist Variable', system-ui, sans-serif;
+  --font-display: 'Space Grotesk Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
-/*
- * Dark-first "signal instrument" identity: a deep cool-graphite terminal canvas
- * under a faint hairline dot-grid, with the match-state colors (emerald have /
- * amber gap / rose honesty / teal location) used as a multi-channel readout —
- * the palette itself is the signature, not one accent. Mono for all labels/data.
- */
-.dark {
-  --background: oklch(0.152 0.008 258);
-  --foreground: oklch(0.94 0.005 250);
-  --card: oklch(0.186 0.009 258);
-  --card-foreground: oklch(0.94 0.005 250);
-  --popover: oklch(0.176 0.009 258);
-  --popover-foreground: oklch(0.94 0.005 250);
-  --primary: oklch(0.74 0.15 250);
-  --primary-foreground: oklch(0.14 0.01 258);
-  --secondary: oklch(0.245 0.01 258);
-  --secondary-foreground: oklch(0.94 0.005 250);
-  --muted: oklch(0.225 0.009 258);
-  --muted-foreground: oklch(0.665 0.014 250);
-  --accent: oklch(0.28 0.05 250);
-  --accent-foreground: oklch(0.94 0.005 250);
-  --destructive: oklch(0.70 0.18 22);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 11%);
-  --ring: oklch(0.74 0.15 250);
-  --have: oklch(0.76 0.15 158);
-  --gap: oklch(0.80 0.14 72);
-  --honesty: oklch(0.72 0.17 22);
-  --loc: oklch(0.77 0.11 200);
-  --sidebar: oklch(0.176 0.009 258);
-  --sidebar-foreground: oklch(0.94 0.005 250);
-  --sidebar-primary: oklch(0.74 0.15 250);
-  --sidebar-primary-foreground: oklch(0.14 0.01 258);
-  --sidebar-accent: oklch(0.28 0.05 250);
-  --sidebar-accent-foreground: oklch(0.94 0.005 250);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.74 0.15 250);
+  /* match-state colors */
+  --have: oklch(0.44 0.11 155);
+  --gap: oklch(0.52 0.14 60);
+  --honesty: oklch(0.50 0.17 25);
+  --loc: var(--geo);
+
+  /* shadcn tokens, mapped onto the industrial palette so reused components
+     (the resume editor/preview) adopt it with no per-component overrides. */
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: oklch(0.99 0.002 250);
+  --card-foreground: var(--ink);
+  --popover: oklch(0.99 0.002 250);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: oklch(0.94 0.003 250);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(0.95 0.003 250);
+  --muted-foreground: var(--dim);
+  --accent: oklch(0.93 0.004 250);
+  --accent-foreground: var(--ink);
+  --destructive: var(--honesty);
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: var(--ink);
+  --radius: 0px;
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: oklch(0.93 0.004 250);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--ink);
 }
 
 @layer base {
@@ -140,10 +120,6 @@ body {
   }
   body {
     @apply bg-background text-foreground;
-    /* Faint hairline dot-grid: the instrument-panel canvas behind the content. */
-    background-image: radial-gradient(color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px);
-    background-size: 22px 22px;
-    background-attachment: fixed;
   }
   html {
     @apply font-sans;
@@ -167,7 +143,7 @@ body {
     font-size: 0.72rem;
     line-height: 1;
     padding: 0.22rem 0.44rem;
-    border-radius: 0.3rem;
+    border-radius: 0;
     border: 1px solid var(--border);
     white-space: nowrap;
     color: var(--muted-foreground);

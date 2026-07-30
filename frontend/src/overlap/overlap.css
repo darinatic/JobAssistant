@@ -6,33 +6,9 @@
    green/amber/rose carry meaning. No indigo, no gradients, no shadows.
    ========================================================================== */
 
+/* The industrial tokens now live globally in index.css `:root` (single source,
+   shared by both surfaces). `.ov` is just the base canvas that reads them. */
 .ov {
-  /* palette (oklch authored) */
-  --ink: oklch(0.15 0.01 250);
-  --dim: oklch(0.42 0.012 250);
-  --body: oklch(0.30 0.012 250);
-  --hair: oklch(0.15 0.01 250 / 0.12);
-  --rule: oklch(0.15 0.01 250 / 0.25);
-  --paper: oklch(0.97 0 0);
-  --surface: oklch(0.965 0.003 250);
-  --panel: oklch(0.15 0.01 250 / 0.04);
-  --have: oklch(0.44 0.11 155);
-  --gap: oklch(0.52 0.14 60);
-  --honesty: oklch(0.50 0.17 25);
-  --geo: oklch(0.45 0.09 215);
-
-  --font-display: 'Space Grotesk Variable', system-ui, sans-serif;
-  --font-body: 'Geist Variable', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
-
-  /* Retheme reused shadcn components (the editor/preview) to the industrial
-     language: ink instead of indigo, square corners. Scoped to `.ov`, so nothing
-     outside the redesigned surfaces is affected. */
-  --primary: var(--ink);
-  --primary-foreground: var(--paper);
-  --ring: var(--ink);
-  --radius: 0px;
-
   background: var(--surface);
   color: var(--body);
   font-family: var(--font-body);
