@@ -29,25 +29,39 @@ def test_gives_up_after_retries(monkeypatch):
     assert out == ""
 
 
-def test_semaphore_bounds_concurrency(monkeypatch):
+def test_session_slot_bounds_concurrency(monkeypatch):
+    # The slot is the global cap every session path (gated/enrich/on-demand/JobStreet)
+    # acquires; never more than BROWSERBASE_MAX_SESSIONS held at once.
     monkeypatch.setattr(pool.settings, "browserbase_max_sessions", 2)
     pool.reset_pool()
     live = 0
     peak = 0
 
-    async def slow(platform, external_id, url):
+    async def hold():
         nonlocal live, peak
-        live += 1
-        peak = max(peak, live)
-        await asyncio.sleep(0.02)
-        live -= 1
-        return "JD"
-
-    monkeypatch.setattr(pool, "_fetch_once", slow)
+        async with pool.session_slot():
+            live += 1
+            peak = max(peak, live)
+            await asyncio.sleep(0.02)
+            live -= 1
 
     async def run():
-        jobs = [{"platform": "linkedin", "external_id": str(i), "url": "u"} for i in range(8)]
-        await asyncio.gather(*(pool.fetch_jd(j) for j in jobs))
+        await asyncio.gather(*(hold() for _ in range(8)))
 
     asyncio.run(run())
-    assert peak <= 2  # never more than the session cap in flight
+    assert peak <= 2
+
+
+def test_acquire_release_slot_balance(monkeypatch):
+    # acquire_slot/release_slot (used by StealthBrowser across start/close) balance.
+    monkeypatch.setattr(pool.settings, "browserbase_max_sessions", 1)
+    pool.reset_pool()
+
+    async def run():
+        await pool.acquire_slot()
+        pool.release_slot()
+        # after releasing, the single slot is free again → next acquire doesn't block
+        await asyncio.wait_for(pool.acquire_slot(), timeout=0.5)
+        pool.release_slot()
+
+    asyncio.run(run())

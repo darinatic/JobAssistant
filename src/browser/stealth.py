@@ -98,6 +98,7 @@ class StealthBrowser:
         self._page: Page | None = None
         self._bb = None
         self._bb_session = None
+        self._slot_held = False  # holds a global pool session slot (Browserbase path)
 
     async def __aenter__(self):
         await self.start()
@@ -132,9 +133,13 @@ class StealthBrowser:
     async def _start_browserbase(self):
         """Connect to a Browserbase cloud browser over CDP (stealth handled remotely)."""
         from src.browser import browserbase as bb
+        from src.browser import pool
 
-        self._bb, self._bb_session = await bb.create_session()
+        # One global session slot for this browser's lifetime (see pool.py).
+        await pool.acquire_slot()
+        self._slot_held = True
         try:
+            self._bb, self._bb_session = await bb.create_session()
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.connect_over_cdp(self._bb_session.connect_url)
             self._context = self._browser.contexts[0]
@@ -182,6 +187,10 @@ class StealthBrowser:
                 from src.browser import browserbase as bb
                 await bb.release_session(self._bb, self._bb_session)
                 self._bb_session = None
+            if self._slot_held:
+                from src.browser import pool
+                pool.release_slot()
+                self._slot_held = False
             return
         await self._quiet(self._page, "close", "page close")
         self._page = None

@@ -80,18 +80,23 @@ async def _connected_page() -> AsyncIterator[object]:
     """
     from patchright.async_api import async_playwright
 
-    bb, session = await create_session()
-    try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.connect_over_cdp(session.connect_url)
-            try:
-                context = browser.contexts[0]
-                page = context.pages[0] if context.pages else await context.new_page()
-                yield page
-            finally:
-                await _close_quietly(browser)
-    finally:
-        await release_session(bb, session)
+    from src.browser import pool
+
+    # Hold a global session slot for the whole session lifetime (the cap spans every
+    # path — gated/enrich/on-demand — not just gated search).
+    async with pool.session_slot():
+        bb, session = await create_session()
+        try:
+            async with async_playwright() as pw:
+                browser = await pw.chromium.connect_over_cdp(session.connect_url)
+                try:
+                    context = browser.contexts[0]
+                    page = context.pages[0] if context.pages else await context.new_page()
+                    yield page
+                finally:
+                    await _close_quietly(browser)
+        finally:
+            await release_session(bb, session)
 
 
 async def _read_detail(page) -> JobDetail:
