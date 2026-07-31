@@ -172,6 +172,7 @@ function Home() {
   const [searching, setSearching] = useState(false)
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [refine, setRefine] = useState<RefineState>(EMPTY_REFINE)  // client-side result refinement
+  const [strongFitsOnly, setStrongFitsOnly] = useState(false)       // server: gate to good-fit jobs (predictor path)
   const [insights, setInsights] = useState<Insights | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [downloading, setDownloading] = useState<'resume' | 'cover' | null>(null)
@@ -307,6 +308,7 @@ function Home() {
           query,
           resume_markdown: cv || undefined,
           filters: toRequestFilters(filters, query, interpreted?.location ?? 'Singapore'),
+          strong_fits_only: strongFitsOnly,
         },
         {
           onInterpreted: (d) => { setInterpreted(d) },
@@ -474,6 +476,15 @@ function Home() {
                       {searching ? 'searching…' : 'execute'}
                     </button>
                   </div>
+
+                  {/* strong-fits gate toggle — off by default (explore everything, ranked by
+                      fit); on gates to good AI-fit jobs. Effective only with the predictor on. */}
+                  <button onClick={() => setStrongFitsOnly((v) => !v)} aria-pressed={strongFitsOnly}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 20px', borderBottom: '2px solid var(--ink)', background: 'transparent', cursor: 'pointer', textAlign: 'left', flexWrap: 'wrap' }}>
+                    <span style={{ width: 13, height: 13, flexShrink: 0, border: '1.5px solid var(--ink)', background: strongFitsOnly ? 'var(--ink)' : 'transparent', color: 'var(--paper)', fontSize: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{strongFitsOnly ? '✓' : ''}</span>
+                    <span className="ov-micro" style={{ fontSize: 9, color: 'var(--ink)' }}>only strong fits</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--dim)' }}>off = explore every match, ranked by AI fit · on = good fits only</span>
+                  </button>
 
                   {/* scan strip while searching */}
                   {searching && (

@@ -216,11 +216,16 @@ async def search_jobs_gated_stream(
     experience_levels: list[str] | None = None,
     remote_options: list[str] | None = None,
     master_cv: str | None = None,
+    gate: bool = True,
 ) -> AsyncIterator[dict]:
-    """Predictor-gated search: score each scraped job and surface only good-fit
-    ones (soft gate + floor + cap). JDs are fetched eagerly (MCF inline, others via
-    the bounded Browserbase pool); the JD is preprocessed before scoring. Yields
-    ``{"type":"progress",...}`` and ``{"type":"job","data":...}`` items.
+    """Predictor-scored search: fetch + score each scraped job's JD (MCF inline,
+    others via the bounded Browserbase pool). Yields ``{"type":"progress",...}`` and
+    ``{"type":"job","data":...}`` items, always carrying the learned ``fit``.
+
+    ``gate`` (default True) surfaces only good-fit jobs — a soft gate (threshold)
+    with a floor + a 3x scrape cap to fill the list. ``gate=False`` returns EVERY
+    scored job ranked by fit (no hiding, no over-scrape) — the exploration default
+    the UI uses; a "only strong fits" toggle turns the gate back on.
 
     Only meaningful when the predictor is enabled; callers use the lazy
     ``search_jobs_stream`` otherwise.
@@ -230,7 +235,9 @@ async def search_jobs_gated_stream(
     from src.jd_preprocess import preprocess_jd
 
     n_target = max_jobs
-    cap = max(n_target, n_target * settings.gate_scrape_cap_mult)
+    # Gate on: over-scrape to find enough good-fit jobs. Gate off: exactly n_target.
+    threshold = settings.match_gate_threshold if gate else 0.0
+    cap = max(n_target, n_target * settings.gate_scrape_cap_mult) if gate else n_target
     cv_skills = extract_skills(master_cv) if master_cv else None
     n_workers = max(1, int(settings.browserbase_max_sessions))
     # Encode the CV ONCE for the whole search; workers reuse the embedding to score
@@ -293,7 +300,8 @@ async def search_jobs_gated_stream(
             best.append(item)
             yield {"type": "progress", "found": passed, "target": n_target,
                    "scanned": scanned, "unfetchable": unfetchable}
-            if (item.get("fit") or 0) >= settings.match_gate_threshold:
+            # Gate off → threshold 0 → every scored job passes (the client ranks by fit).
+            if (item.get("fit") or 0) >= threshold:
                 passed += 1
                 yielded.add(f"{item['platform']}:{item['external_id']}")
                 yield {"type": "job", "data": item}
@@ -311,8 +319,9 @@ async def search_jobs_gated_stream(
             unfetchable, unfetchable + scanned,
         )
 
-    # Floor: too few passed -> top up with the best sub-threshold jobs, labeled.
-    if passed < n_target:
+    # Floor (gate only): too few passed -> top up with the best sub-threshold jobs,
+    # labeled. With the gate off everything already passed, so there's nothing to floor.
+    if gate and passed < n_target:
         for item in sorted(best, key=lambda j: j.get("fit") or 0, reverse=True):
             key = f"{item['platform']}:{item['external_id']}"
             if key in yielded:

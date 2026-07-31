@@ -135,7 +135,7 @@ export const api = {
 
   // Progressive search — NDJSON stream. Calls handlers as results arrive.
   searchStream: async (
-    body: { query: string; filters?: SearchFilters; resume_markdown?: string },
+    body: { query: string; filters?: SearchFilters; resume_markdown?: string; strong_fits_only?: boolean },
     h: {
       onInterpreted: (d: Record<string, any>) => void
       onProgress?: (p: { found: number; target: number; scanned: number; unfetchable?: number }) => void

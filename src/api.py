@@ -90,6 +90,7 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=2, description="Natural language, e.g. '50 remote AI Engineer jobs on JobStreet this week'")
     resume_markdown: str | None = Field(default=None, description="If given, jobs are ranked by CV relevance")
     filters: SearchFilters | None = Field(default=None, description="Explicit UI dropdown filters; when present the LLM parse is skipped")
+    strong_fits_only: bool = Field(default=False, description="Predictor path only: gate to good-fit jobs instead of returning all ranked by fit")
 
 
 class SearchResponse(BaseModel):
@@ -332,7 +333,7 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
                 keyword=q.keyword, location=q.location, platforms=q.platforms or None,
                 max_jobs=q.max_jobs, date_posted=q.date_posted,
                 experience_levels=q.experience_levels, remote_options=q.remote_options,
-                master_cv=req.resume_markdown,
+                master_cv=req.resume_markdown, gate=req.strong_fits_only,
             ):
                 if msg.get("type") == "job" and msg["data"].get("below_threshold"):
                     floor = True
