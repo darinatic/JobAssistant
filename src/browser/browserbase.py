@@ -61,21 +61,37 @@ async def release_session(bb, session) -> None:
         log.warning("Browserbase session release failed: %s", e)
 
 
+async def _close_quietly(browser) -> None:
+    """Best-effort browser disconnect — a close failure must NOT skip session release."""
+    try:
+        await browser.close()
+    except Exception as e:
+        log.warning("Browserbase browser close failed: %s", e)
+
+
 @asynccontextmanager
 async def _connected_page() -> AsyncIterator[object]:
-    """Create a Browserbase session and yield a Playwright page bound to it."""
+    """Create a Browserbase session and yield a Playwright page bound to it.
+
+    The session is ALWAYS released — even if connect_over_cdp or browser.close
+    throws — so a failure can't leak a session (which would hold a concurrency slot
+    and keep billing until Browserbase's idle timeout). ``create_session`` is
+    outside the try on purpose: if it fails, no session exists to release.
+    """
     from patchright.async_api import async_playwright
 
     bb, session = await create_session()
-    async with async_playwright() as pw:
-        browser = await pw.chromium.connect_over_cdp(session.connect_url)
-        try:
-            context = browser.contexts[0]
-            page = context.pages[0] if context.pages else await context.new_page()
-            yield page
-        finally:
-            await browser.close()
-            await release_session(bb, session)
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.connect_over_cdp(session.connect_url)
+            try:
+                context = browser.contexts[0]
+                page = context.pages[0] if context.pages else await context.new_page()
+                yield page
+            finally:
+                await _close_quietly(browser)
+    finally:
+        await release_session(bb, session)
 
 
 async def _read_detail(page) -> JobDetail:

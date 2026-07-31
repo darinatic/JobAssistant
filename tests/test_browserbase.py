@@ -3,6 +3,9 @@ decorator once silently broke ALL cloud-browser description fetching (empty resu
 no error). These catch that class of regression without hitting the network."""
 
 import inspect
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.browser import browserbase as bb
 
@@ -18,3 +21,80 @@ def test_connected_page_is_an_async_context_manager():
     # the body (that happens on __aenter__), so this touches no network.
     cm = bb._connected_page()
     assert hasattr(cm, "__aenter__") and hasattr(cm, "__aexit__")
+
+
+class _FakePlaywrightCM:
+    """Stands in for `async_playwright()` — an async context manager yielding `pw`."""
+    def __init__(self, pw):
+        self._pw = pw
+
+    async def __aenter__(self):
+        return self._pw
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _stub_session(monkeypatch, session_id: str):
+    """Stub create_session/release_session; return the list release ids land in."""
+    released: list[str] = []
+    session = MagicMock(id=session_id, connect_url="ws://fake")
+
+    async def _create():
+        return MagicMock(), session
+
+    async def _release(_bb, s):
+        released.append(s.id)
+
+    monkeypatch.setattr(bb, "create_session", _create)
+    monkeypatch.setattr(bb, "release_session", _release)
+    return released
+
+
+@pytest.mark.asyncio
+async def test_connected_page_releases_session_when_connect_fails(monkeypatch):
+    # Leak path: create_session succeeds, connect_over_cdp throws. The session must
+    # still be released (it lives outside the try, but the outer finally covers it).
+    released = _stub_session(monkeypatch, "s-connect")
+    pw = MagicMock()
+    pw.chromium.connect_over_cdp = AsyncMock(side_effect=RuntimeError("connect boom"))
+    monkeypatch.setattr("patchright.async_api.async_playwright", lambda: _FakePlaywrightCM(pw))
+
+    with pytest.raises(RuntimeError, match="connect boom"):
+        async with bb._connected_page():
+            pass
+    assert released == ["s-connect"]
+
+
+@pytest.mark.asyncio
+async def test_connected_page_releases_session_when_close_fails(monkeypatch):
+    # Leak path: browser.close() throws during teardown — release must still run.
+    released = _stub_session(monkeypatch, "s-close")
+    browser = MagicMock()
+    browser.close = AsyncMock(side_effect=RuntimeError("close boom"))
+    ctx = MagicMock()
+    ctx.pages = [MagicMock()]
+    browser.contexts = [ctx]
+    pw = MagicMock()
+    pw.chromium.connect_over_cdp = AsyncMock(return_value=browser)
+    monkeypatch.setattr("patchright.async_api.async_playwright", lambda: _FakePlaywrightCM(pw))
+
+    async with bb._connected_page() as page:  # close boom is swallowed here
+        assert page is ctx.pages[0]
+    assert released == ["s-close"]
+
+
+@pytest.mark.asyncio
+async def test_stealth_browserbase_releases_session_on_start_failure(monkeypatch):
+    # Leak path: StealthBrowser creates a session, then Playwright fails to start —
+    # __aexit__ won't run, so start() must release the session itself before raising.
+    from src.browser import stealth
+    released = _stub_session(monkeypatch, "s-start")
+    apw = MagicMock()
+    apw.start = AsyncMock(side_effect=RuntimeError("pw boom"))
+    monkeypatch.setattr(stealth, "async_playwright", lambda: apw)
+
+    sb = stealth.StealthBrowser(via_browserbase=True)
+    with pytest.raises(RuntimeError, match="pw boom"):
+        await sb.start()
+    assert released == ["s-start"]

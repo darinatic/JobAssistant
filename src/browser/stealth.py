@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import logging
 import random
 from pathlib import Path
 
 from patchright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from src.utils.config import settings
+
+log = logging.getLogger(__name__)
 
 USER_DATA_DIR = Path("browser_data")
 
@@ -131,10 +134,16 @@ class StealthBrowser:
         from src.browser import browserbase as bb
 
         self._bb, self._bb_session = await bb.create_session()
-        self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.connect_over_cdp(self._bb_session.connect_url)
-        self._context = self._browser.contexts[0]
-        self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+        try:
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.connect_over_cdp(self._bb_session.connect_url)
+            self._context = self._browser.contexts[0]
+            self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+        except Exception:
+            # A session was created but we failed to attach — release it (via close)
+            # so it isn't leaked, then re-raise so the caller knows start failed.
+            await self.close()
+            raise
 
     async def _inject_stealth_scripts(self):
         if not self._page:
@@ -160,24 +169,39 @@ class StealthBrowser:
         """)
 
     async def close(self):
+        """Tear down, guaranteeing the Browserbase session is released. Each step is
+        guarded independently so one failure can't skip the session release, and the
+        method is idempotent (attrs are nulled) so it's safe to call more than once."""
         if self.via_browserbase:
             # Remote context/page belong to Browserbase — just disconnect + release.
-            if self._browser:
-                await self._browser.close()
-            if self._playwright:
-                await self._playwright.stop()
+            await self._quiet(self._browser, "close", "Browserbase browser close")
+            self._browser = None
+            await self._quiet(self._playwright, "stop", "Playwright stop")
+            self._playwright = None
             if self._bb_session:
                 from src.browser import browserbase as bb
                 await bb.release_session(self._bb, self._bb_session)
+                self._bb_session = None
             return
-        if self._page:
-            await self._page.close()
-        if self._context:
-            await self._context.close()
-        if self._browser:
-            await self._browser.close()
-        if self._playwright:
-            await self._playwright.stop()
+        await self._quiet(self._page, "close", "page close")
+        self._page = None
+        await self._quiet(self._context, "close", "context close")
+        self._context = None
+        await self._quiet(self._browser, "close", "browser close")
+        self._browser = None
+        await self._quiet(self._playwright, "stop", "Playwright stop")
+        self._playwright = None
+
+    @staticmethod
+    async def _quiet(obj, method: str, label: str) -> None:
+        """Call ``await obj.method()`` if obj is set, swallowing + logging errors so a
+        teardown failure never aborts the remaining cleanup (esp. session release)."""
+        if obj is None:
+            return
+        try:
+            await getattr(obj, method)()
+        except Exception as e:
+            log.warning("%s failed: %s", label, e)
 
     @property
     def page(self) -> Page:
