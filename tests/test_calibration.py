@@ -1,3 +1,5 @@
+import pytest
+
 from src.match_predictor_calibration import apply_calibration, fit_calibration
 
 
@@ -6,6 +8,10 @@ def test_apply_identity_when_no_calibration():
 
 
 def test_fit_then_apply_is_monotonic_and_stretches():
+    # fit_calibration is an offline (training-box) utility — it needs scikit-learn,
+    # which lives only in the heavy `[train]` extra, not in CI's `[dev]`. Serving
+    # (apply_calibration) is pure interpolation and needs none of it.
+    pytest.importorskip("sklearn")
     # raw preds compressed into [0.1, 0.6]; targets span [0,1].
     raw = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60]
     tgt = [0.0, 0.0, 0.5, 0.5, 1.0, 1.0]
@@ -17,6 +23,7 @@ def test_fit_then_apply_is_monotonic_and_stretches():
 
 
 def test_apply_clips_out_of_range():
+    pytest.importorskip("sklearn")  # fit_calibration is train-box only (see above)
     calib = fit_calibration([0.2, 0.8], [0.0, 1.0])
     assert 0.0 <= apply_calibration(2.0, calib) <= 1.0
 
