@@ -3,11 +3,13 @@ decorator once silently broke ALL cloud-browser description fetching (empty resu
 no error). These catch that class of regression without hitting the network."""
 
 import inspect
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.browser import browserbase as bb
+from src.scrapers.base import JobDetail
 
 
 def test_create_session_is_a_plain_coroutine():
@@ -98,3 +100,30 @@ async def test_stealth_browserbase_releases_session_on_start_failure(monkeypatch
     with pytest.raises(RuntimeError, match="pw boom"):
         await sb.start()
     assert released == ["s-start"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_linkedin_details_rotates_sessions(monkeypatch):
+    # Batch rotation: a fresh session every N jobs so a burst can't wall the tail.
+    monkeypatch.setattr(bb.settings, "browserbase_jobs_per_session", 2)
+    sessions = 0
+    page = MagicMock()
+    page.goto = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_connected_page():
+        nonlocal sessions
+        sessions += 1
+        yield page
+
+    async def fake_read(_page):
+        return JobDetail(description="jd")
+
+    monkeypatch.setattr(bb, "_connected_page", fake_connected_page)
+    monkeypatch.setattr(bb, "_read_detail", fake_read)
+
+    jobs = [{"external_id": str(i)} for i in range(5)]
+    out = [d async for _job, d in bb.fetch_linkedin_details(jobs)]
+
+    assert len(out) == 5 and all(d.description == "jd" for d in out)
+    assert sessions == 3  # ceil(5 / 2) chunks -> 3 rotated sessions

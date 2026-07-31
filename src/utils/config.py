@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # Global ceiling on concurrent Browserbase sessions across ALL requests, so a
     # burst of users can't exceed the plan. Used by src/browser/pool.py.
     browserbase_max_sessions: int = 8
+    # LinkedIn detail fetches rotate to a fresh Browserbase session (new IP with
+    # proxies) every N jobs, so a batch can't burst past LinkedIn's ~5-10 req/IP
+    # soft-wall and lose the tail. Small = wall-safe but more sessions; 0/1 = per-job.
+    browserbase_jobs_per_session: int = 6
 
     # Per-IP rate limits for the expensive endpoints (LLM + scrape). 0 = disabled.
     # Sized for a public no-auth demo; override via env in production.

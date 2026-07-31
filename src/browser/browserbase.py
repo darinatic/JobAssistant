@@ -137,15 +137,12 @@ async def _read_detail(page) -> JobDetail:
     )
 
 
-async def fetch_linkedin_details(jobs: list[dict]) -> AsyncIterator[tuple[dict, JobDetail]]:
-    """Yield ``(job, JobDetail)`` for each LinkedIn job, via one proxied cloud browser.
-
-    Never raises — on a session/page failure it yields empty details so the caller's
-    enrichment still completes (and falls back gracefully).
-    """
+async def _fetch_chunk(chunk: list[dict]) -> AsyncIterator[tuple[dict, JobDetail]]:
+    """Fetch one chunk of LinkedIn jobs on a single session. Never raises — a session
+    failure yields empty details for the whole chunk so enrichment still completes."""
     try:
         async with _connected_page() as page:
-            for job in jobs:
+            for job in chunk:
                 detail = JobDetail()
                 try:
                     await page.goto(
@@ -157,9 +154,24 @@ async def fetch_linkedin_details(jobs: list[dict]) -> AsyncIterator[tuple[dict, 
                     log.warning("Browserbase LinkedIn fetch failed (%s): %s", job.get("external_id"), e)
                 yield job, detail
     except Exception as e:
-        log.warning("Browserbase session unavailable, skipping: %s", e)
-        for job in jobs:
+        log.warning("Browserbase session unavailable, skipping chunk: %s", e)
+        for job in chunk:
             yield job, JobDetail()
+
+
+async def fetch_linkedin_details(jobs: list[dict]) -> AsyncIterator[tuple[dict, JobDetail]]:
+    """Yield ``(job, JobDetail)`` for each LinkedIn job, via proxied cloud browsers.
+
+    Rotates to a FRESH session (new IP with proxies) every
+    ``BROWSERBASE_JOBS_PER_SESSION`` jobs, so a batch can't burst past LinkedIn's
+    ~5-10 req/IP soft-wall and lose the tail. Sessions are opened one chunk at a
+    time (each takes one global pool slot); the single-job gated path is unaffected
+    (one job -> one chunk). Never raises.
+    """
+    batch = max(1, int(settings.browserbase_jobs_per_session))
+    for start in range(0, len(jobs), batch):
+        async for job, detail in _fetch_chunk(jobs[start:start + batch]):
+            yield job, detail
 
 
 async def fetch_linkedin_descriptions(jobs: list[dict]) -> AsyncIterator[tuple[dict, str]]:
