@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     # without them, the cloud browser's real fingerprint reads LinkedIn fine; turn
     # this on for extra wall-resistance once you're on a paid plan.
     browserbase_proxies: bool = False
+    # Geo-target the residential proxy so its IP matches the SG session region +
+    # SG locale/timezone (removes a fingerprint mismatch, reads as a local user).
+    # ISO-2 country + uppercase city; blank country → Browserbase's default geo.
+    browserbase_proxy_country: str = "SG"
+    browserbase_proxy_city: str = "SINGAPORE"
     # Route the browser-based scraper (JobStreet) through Browserbase too, so it
     # survives datacenter-IP blocking in production. LinkedIn already uses Browserbase
     # whenever browserbase_enabled. Off by default — local dev uses in-container Chromium.

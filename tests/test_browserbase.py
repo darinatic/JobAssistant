@@ -25,6 +25,23 @@ def test_connected_page_is_an_async_context_manager():
     assert hasattr(cm, "__aenter__") and hasattr(cm, "__aexit__")
 
 
+def test_proxies_config_geo_targets_configured_location(monkeypatch):
+    monkeypatch.setattr(bb.settings, "browserbase_proxies", True)
+    monkeypatch.setattr(bb.settings, "browserbase_proxy_country", "SG")
+    monkeypatch.setattr(bb.settings, "browserbase_proxy_city", "SINGAPORE")
+    assert bb._proxies_config() == [
+        {"type": "browserbase", "geolocation": {"country": "SG", "city": "SINGAPORE"}}
+    ]
+
+
+def test_proxies_config_off_and_default_geo(monkeypatch):
+    monkeypatch.setattr(bb.settings, "browserbase_proxies", False)
+    assert bb._proxies_config() is None  # proxies disabled → no proxy kwarg
+    monkeypatch.setattr(bb.settings, "browserbase_proxies", True)
+    monkeypatch.setattr(bb.settings, "browserbase_proxy_country", "")
+    assert bb._proxies_config() is True  # blank country → Browserbase default geo
+
+
 class _FakePlaywrightCM:
     """Stands in for `async_playwright()` — an async context manager yielding `pw`."""
     def __init__(self, pw):

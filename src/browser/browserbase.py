@@ -32,9 +32,27 @@ def enabled() -> bool:
     return settings.browserbase_enabled
 
 
+def _proxies_config():
+    """Browserbase ``proxies`` value. Off → ``None``. On → a geo-targeted residential
+    proxy (``[{type: browserbase, geolocation: {country, city}}]``) so the IP matches
+    the SG session region + locale; blank country falls back to ``True`` (default geo).
+    Same cost as the default residential proxy — just a location hint."""
+    if not settings.browserbase_proxies:
+        return None
+    country = (settings.browserbase_proxy_country or "").strip()
+    if not country:
+        return True
+    geo: dict = {"country": country}
+    if settings.browserbase_proxy_city:
+        geo["city"] = settings.browserbase_proxy_city
+    return [{"type": "browserbase", "geolocation": geo}]
+
+
 async def create_session():
     """Create a Browserbase cloud-browser session. Returns ``(client, session)``;
-    ``session.connect_url`` is a CDP endpoint for Playwright/patchright."""
+    ``session.connect_url`` is a CDP endpoint for Playwright/patchright. The global
+    session slot is held by the caller (``_connected_page`` / ``StealthBrowser``),
+    NOT here — acquiring it here too would double-count and deadlock."""
     from browserbase import Browserbase
 
     bb = Browserbase(api_key=settings.browserbase_api_key.get_secret_value())
@@ -42,8 +60,9 @@ async def create_session():
         "project_id": settings.browserbase_project_id,
         "region": settings.browserbase_region,
     }
-    if settings.browserbase_proxies:
-        create_kwargs["proxies"] = True  # residential rotation — paid plans only
+    proxies = _proxies_config()
+    if proxies is not None:
+        create_kwargs["proxies"] = proxies
     # The SDK is synchronous; keep the event loop free while the session spins up.
     session = await asyncio.to_thread(bb.sessions.create, **create_kwargs)
     return bb, session
