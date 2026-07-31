@@ -1,6 +1,7 @@
 import asyncio
 
 from src.browser import pool
+from src.scrapers.base import JobDetail
 
 
 def setup_function():
@@ -12,21 +13,22 @@ def test_retries_once_on_empty(monkeypatch):
 
     async def fake_fetch(platform, external_id, url):
         calls.append(external_id)
-        return "" if len(calls) == 1 else "Real JD text"
+        # First attempt empty, retry returns a full detail (with salary).
+        return JobDetail() if len(calls) == 1 else JobDetail(description="Real JD text", salary_min=8000)
 
-    monkeypatch.setattr(pool, "_fetch_once", fake_fetch)
-    out = asyncio.run(pool.fetch_jd({"platform": "linkedin", "external_id": "1", "url": "u"}))
-    assert out == "Real JD text"
+    monkeypatch.setattr(pool, "_fetch_detail_once", fake_fetch)
+    out = asyncio.run(pool.fetch_jd_detail({"platform": "linkedin", "external_id": "1", "url": "u"}))
+    assert out.description == "Real JD text" and out.salary_min == 8000
     assert len(calls) == 2  # first empty -> retried once
 
 
 def test_gives_up_after_retries(monkeypatch):
     async def always_empty(platform, external_id, url):
-        return ""
+        return JobDetail()
 
-    monkeypatch.setattr(pool, "_fetch_once", always_empty)
-    out = asyncio.run(pool.fetch_jd({"platform": "linkedin", "external_id": "1", "url": "u"}))
-    assert out == ""
+    monkeypatch.setattr(pool, "_fetch_detail_once", always_empty)
+    out = asyncio.run(pool.fetch_jd_detail({"platform": "linkedin", "external_id": "1", "url": "u"}))
+    assert out.description == ""
 
 
 def test_session_slot_bounds_concurrency(monkeypatch):

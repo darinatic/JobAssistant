@@ -149,8 +149,9 @@
 }
 .ov-jobrow-idx { grid-area: idx; }
 .ov-jobrow-role { grid-area: role; }
-.ov-jobrow-salary { grid-area: salary; }
-.ov-jobrow-verdict { grid-area: verdict; }
+/* clip so a wide salary/verdict stamp can't spill past its column into the readout rail */
+.ov-jobrow-salary { grid-area: salary; overflow: hidden; }
+.ov-jobrow-verdict { grid-area: verdict; overflow: hidden; }
 @media (max-width: 820px) {
   .ov-jobrow {
     grid-template-columns: 40px minmax(0, 1fr) auto;

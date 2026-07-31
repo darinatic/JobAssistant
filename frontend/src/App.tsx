@@ -120,10 +120,14 @@ function Coverage({ have, total }: { have: number; total: number }) {
 // Relative fit within the current results, never the raw score.
 function FitBadge({ fit, allFits }: { fit?: number; allFits: number[] }) {
   if (fit == null) return null
-  const { label } = fitLabel(fit, allFits)
-  const l = label.toLowerCase()
-  const stampClass = l.includes('top') ? 'ov-stamp-topfit' : l.includes('strong') ? 'ov-stamp-strong' : 'ov-stamp-moderate'
-  return <span className={`ov-stamp ${stampClass}`} title="AI-predicted fit, relative to these results">{label}</span>
+  const l = fitLabel(fit, allFits).label.toLowerCase()
+  // Short stamps (per the design) so a "moderate fit" can't overflow the fixed
+  // verdict column into the readout rail. Keep "top fit" as the marker.
+  const [stampClass, text] = l.includes('top') ? ['ov-stamp-topfit', 'top fit']
+    : l.includes('strong') ? ['ov-stamp-strong', 'strong']
+    : l.includes('moderate') ? ['ov-stamp-moderate', 'moderate']
+    : ['ov-stamp-moderate', 'weak']
+  return <span className={`ov-stamp ${stampClass}`} title="AI-predicted fit, relative to these results">{text}</span>
 }
 
 function JobMeta({ job }: { job: Job }) {

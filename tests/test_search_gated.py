@@ -59,6 +59,35 @@ def test_floor_when_too_few_pass(monkeypatch):
     assert all(j.get("below_threshold") for j in jobs)
 
 
+def test_gated_merges_linkedin_detail_salary_and_seniority(monkeypatch):
+    # A LinkedIn card has no inline description → the worker fetches the DETAIL, whose
+    # salary/seniority (detail-only for LinkedIn) must land on the scored job.
+    from src.scrapers.base import JobDetail
+
+    async def li_scrape(*a, **k):
+        yield {"platform": "linkedin", "external_id": "li1", "url": "u", "title": "AI Engineer",
+               "company": "Hays", "location": "SG", "description": "", "posted_date": ""}
+
+    async def fake_detail(job, *, retries=1):
+        return JobDetail(description="We need Python and RAG.", salary_min=8000, salary_max=12000,
+                         salary_period="monthly", experience_raw="Mid-Senior level", experience_level="mid_senior")
+
+    monkeypatch.setattr(search, "_scrape", li_scrape)
+    monkeypatch.setattr(search.settings, "match_gate_threshold", 40)
+    monkeypatch.setattr("src.browser.pool.fetch_jd_detail", fake_detail)
+
+    with patch("src.match_predictor.is_enabled", return_value=True), \
+         patch("src.match_predictor.embed_resume", return_value="CVEMB"), \
+         patch("src.match_predictor.score", return_value=0.8):
+        items = _collect(search.search_jobs_gated_stream(
+            keyword="AI", platforms=["linkedin"], max_jobs=1, master_cv="cv"))
+    jobs = [i["data"] for i in items if i["type"] == "job"]
+    assert len(jobs) == 1
+    j = jobs[0]
+    assert j["salary_min"] == 8000 and j["salary_max"] == 12000 and j["salary_period"] == "monthly"
+    assert j["experience_level"] == "mid_senior"
+
+
 def test_emits_progress(monkeypatch):
     monkeypatch.setattr(search, "_scrape", _fake_scrape)
     monkeypatch.setattr(search.settings, "match_gate_threshold", 50)

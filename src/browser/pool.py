@@ -18,6 +18,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+from src.scrapers.base import JobDetail
 from src.utils.config import settings
 
 log = logging.getLogger(__name__)
@@ -57,25 +58,28 @@ async def session_slot():
         release_slot()
 
 
-async def _fetch_once(platform: str, external_id: str, url: str) -> str:
+async def _fetch_detail_once(platform: str, external_id: str, url: str) -> JobDetail:
     # Indirection so tests can stub the actual network fetch.
-    from src.search import fetch_job_description
-    return await fetch_job_description(platform, external_id, url)
+    from src.search import fetch_job_detail
+    return await fetch_job_detail(platform, external_id, url)
 
 
-async def fetch_jd(job: dict, *, retries: int = 1) -> str:
-    """Fetch one job's JD (the session it opens takes a global slot), retrying once
-    on empty. No semaphore here — the slot lives at the session boundary, so gating
-    it here too would double-acquire and deadlock the gated workers."""
+async def fetch_jd_detail(job: dict, *, retries: int = 1) -> JobDetail:
+    """Fetch one job's full detail — description + salary + seniority (the session it
+    opens takes a global slot) — retrying once on an empty description. Returns the
+    whole ``JobDetail`` (not just text) so the gated path keeps LinkedIn's detail-only
+    salary/seniority instead of dropping them. No semaphore here — the slot lives at
+    the session boundary, so gating it here too would deadlock the gated workers."""
     platform = (job.get("platform") or "").lower()
     external_id = job.get("external_id", "")
     url = job.get("url", "")
+    detail = JobDetail()
     for _ in range(retries + 1):
         try:
-            desc = await _fetch_once(platform, external_id, url)
+            detail = await _fetch_detail_once(platform, external_id, url)
         except Exception as e:
             log.warning("pool JD fetch error (%s): %s", external_id, e)
-            desc = ""
-        if desc and desc.strip():
-            return desc
-    return ""
+            detail = JobDetail()
+        if detail.description and detail.description.strip():
+            return detail
+    return detail

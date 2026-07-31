@@ -267,8 +267,10 @@ async def search_jobs_gated_stream(
                 await out_q.put(_WORKER_DONE)
                 return
             jd = (job.get("description") or "")
+            detail = None
             if not jd.strip() and (job.get("platform") or "").lower() != "mycareersfuture":
-                jd = await pool.fetch_jd(job)
+                detail = await pool.fetch_jd_detail(job)
+                jd = detail.description
             if not jd.strip():
                 await out_q.put(None)  # unfetchable -> skip, count nothing
                 continue
@@ -276,7 +278,12 @@ async def search_jobs_gated_stream(
             prob = await asyncio.to_thread(
                 match_predictor.score, cv_emb, f"{job.get('title','')}\n{clean}"
             )
-            await out_q.put(_enrich_scored(job, jd, cv_skills, prob))
+            item = _enrich_scored(job, jd, cv_skills, prob)
+            # LinkedIn's salary/seniority live only on the detail page — merge them in
+            # (MCF's ride on the card already; JobStreet's detail has none, card kept).
+            if detail is not None:
+                item.update(_detail_fields(detail))
+            await out_q.put(item)
 
     prod = asyncio.create_task(producer())
     workers = [asyncio.create_task(worker()) for _ in range(n_workers)]
