@@ -26,23 +26,70 @@ export function levelLabel(level: string): string {
   return LEVEL_LABELS[level] ?? level
 }
 
-function amount(n: number): string {
-  return `$${n.toLocaleString('en-US')}`
-}
 function periodSuffix(period?: string | null): string {
   return period === 'monthly' ? '/mo' : period === 'annual' ? '/yr' : ''
 }
+// Compact "K" units so a long annual figure fits the salary column: 36000 -> 36K,
+// 8500 -> 8.5K, 100000 -> 100K; < 1000 shown as-is.
+function k(n: number): string {
+  if (n < 1000) return String(n)
+  const v = n / 1000
+  return `${Number.isInteger(v) ? v : v.toFixed(1)}K`
+}
 
-/** A disclosed salary as a compact string, or null when nothing is disclosed.
- *  Unknown period gets no suffix rather than guessing monthly. */
+/** Compact salary for a row (K units, keeps the board's posted period). Faithful to
+ *  the posting — no monthly conversion; `salaryFull` gives the exact figure. */
 export function formatSalary(job: Job): string | null {
-  const lo = job.salary_min
-  const hi = job.salary_max
-  const suf = periodSuffix(job.salary_period)
-  if (lo != null && hi != null) return `${amount(lo)}–${amount(hi)}${suf}`
-  if (hi != null) return `Up to ${amount(hi)}${suf}`
-  if (lo != null) return `From ${amount(lo)}${suf}`
+  const lo = job.salary_min, hi = job.salary_max, suf = periodSuffix(job.salary_period)
+  if (lo != null && hi != null) return `$${k(lo)}–${k(hi)}${suf}`
+  if (hi != null) return `Up to $${k(hi)}${suf}`
+  if (lo != null) return `From $${k(lo)}${suf}`
   return job.salary_raw ? job.salary_raw.trim() : null
+}
+
+/** Full un-abbreviated salary for a tooltip, e.g. "$36,000 – $100,000/yr". */
+export function salaryFull(job: Job): string | null {
+  const lo = job.salary_min, hi = job.salary_max, suf = periodSuffix(job.salary_period)
+  const f = (n: number) => `$${n.toLocaleString('en-US')}`
+  if (lo != null && hi != null) return `${f(lo)} – ${f(hi)}${suf}`
+  if (hi != null) return `Up to ${f(hi)}${suf}`
+  if (lo != null) return `From ${f(lo)}${suf}`
+  return job.salary_raw ? job.salary_raw.trim() : null
+}
+
+// ---- posted date -----------------------------------------------------------
+
+function relativeAge(ms: number): string {
+  const days = Math.floor(ms / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`
+  return `${Math.floor(days / 365)}y ago`
+}
+
+function unitOf(word: string): string {
+  const w = word.toLowerCase()
+  if (w.startsWith('mo') || w.startsWith('month')) return 'mo'
+  if (w[0] === 'h') return 'h'
+  if (w[0] === 'w') return 'w'
+  if (w[0] === 'y') return 'y'
+  return 'd' // day(s) or unknown
+}
+
+/** Normalize a job's posted date to a compact "Xd ago". Handles ISO dates
+ *  (MCF `createdAt`, LinkedIn `<time>`) and relative board text ("2d ago",
+ *  "1 month ago"). `now` is injectable for deterministic tests. */
+export function postedLabel(job: Job, now: number = Date.now()): string | null {
+  const raw = (job.posted_date || '').trim()
+  if (!raw) return null
+  if (/\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const t = Date.parse(raw)
+    if (!Number.isNaN(t)) return relativeAge(Math.max(0, now - t))
+  }
+  const m = raw.match(/(\d+)\s*([a-z]+)/i)
+  if (m) return `${m[1]}${unitOf(m[2])} ago`
+  return raw.length <= 16 ? raw.toLowerCase() : null
 }
 
 export function hasSalary(job: Job): boolean {

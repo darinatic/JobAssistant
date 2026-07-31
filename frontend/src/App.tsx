@@ -7,8 +7,8 @@ import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
 import { patchSkillsLine, skillInResume } from '@/lib/skills'
 import {
-  formatSalary, experienceLabel, hasSalary, jobTier, applyRefine, refineActive,
-  levelLabel, EMPTY_REFINE, LEVEL_ORDER, type RefineState, type Tier,
+  formatSalary, salaryFull, postedLabel, experienceLabel, hasSalary, jobTier, applyRefine,
+  refineActive, levelLabel, EMPTY_REFINE, LEVEL_ORDER, type RefineState, type Tier,
 } from '@/lib/jobfmt'
 import { SegmentedBar } from '@/overlap/SegmentedBar'
 import {
@@ -131,11 +131,13 @@ function FitBadge({ fit, allFits }: { fit?: number; allFits: number[] }) {
 }
 
 function JobMeta({ job }: { job: Job }) {
+  const posted = postedLabel(job)
   return (
     <span className="ov-mono" style={{ fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.03em', color: 'var(--dim)' }}>
       <span style={{ color: 'var(--ink)' }}>{job.company}</span>
       {'  ·  '}<span style={{ color: 'var(--geo)' }}>◍ {job.location || 'Singapore'}</span>
       {'  ·  '}{job.platform}
+      {posted && <>{'  ·  '}{posted}</>}
     </span>
   )
 }
@@ -149,7 +151,7 @@ function SalaryLevel({ job, align = 'right' }: { job: Job; align?: 'right' | 'le
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: align === 'right' ? 'flex-end' : 'flex-start' }}>
       {salary && (
-        <span className="ov-num" style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{salary}</span>
+        <span className="ov-num" title={salaryFull(job) ?? undefined} style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{salary}</span>
       )}
       {level && (
         <span className="ov-stamp ov-stamp-info" title={job.experience_raw ?? undefined} style={{ fontSize: 9 }}>{level}</span>
@@ -668,6 +670,10 @@ function FilterRows({ filters, setDate, setMax, toggleFilter }: {
 }) {
   return (
     <div style={{ borderBottom: '2px solid var(--ink)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--panel)', borderBottom: '1px solid var(--rule)', flexWrap: 'wrap' }}>
+        <span className="ov-micro" style={{ fontSize: 9, color: 'var(--ink)' }}>▸ search filters</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--dim)' }}>what gets scraped — apply on execute</span>
+      </div>
       <FilterRow label="date">
         {DATE_OPTIONS.map((o) => <FilterBtn key={o.value} active={filters.datePosted === o.value} onClick={() => setDate(o.value)}>{o.label}</FilterBtn>)}
       </FilterRow>
@@ -709,9 +715,9 @@ function RefineBar({ jobs, allFits, refine, setRefine, visibleCount }: {
     setRefine({ ...refine, tiers: refine.tiers.includes(t) ? refine.tiers.filter((x) => x !== t) : [...refine.tiers, t] })
 
   return (
-    <div style={{ borderBottom: '2px solid var(--ink)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', background: 'var(--panel)', borderBottom: '1px solid var(--rule)' }}>
-        <span className="ov-micro" style={{ fontSize: 9 }}>refine these results · {visibleCount} of {jobs.length} shown</span>
+    <div style={{ borderBottom: '2px solid var(--ink)', borderLeft: '3px solid var(--geo)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 17px', background: 'color-mix(in oklab, var(--geo) 6%, transparent)', borderBottom: '1px solid var(--rule)', flexWrap: 'wrap' }}>
+        <span className="ov-micro" style={{ fontSize: 9, color: 'var(--geo)' }}>▾ refine · filters the {jobs.length} results below, no new search · {visibleCount} shown</span>
         {active && <button onClick={() => setRefine(EMPTY_REFINE)} className="ov-micro" style={{ fontSize: 9, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)' }}>reset ✕</button>}
       </div>
       {levelsPresent.length > 0 && (

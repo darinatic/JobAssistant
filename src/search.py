@@ -19,9 +19,12 @@ from src.utils.config import settings
 log = logging.getLogger(__name__)
 
 DEFAULT_PLATFORMS = ["mycareersfuture", "linkedin", "jobstreet"]
-# Reliability-tuned per-platform ceilings (LinkedIn guest soft-walls fast; MCF's
-# JSON API is reliable so it can go higher).
-_CAPS = {"mycareersfuture": 80, "linkedin": 20, "jobstreet": 25}
+# Reliability-tuned per-platform ceilings. LinkedIn raised to 50 (2026-08-01) now
+# that detail fetches go through Browserbase SG proxies + session rotation; the
+# guest card-search can still wall on very large bursts, so a big LinkedIn search
+# may return fewer than asked (graceful — never an error). MCF's JSON API is the
+# most reliable, so it goes highest.
+_CAPS = {"mycareersfuture": 80, "linkedin": 50, "jobstreet": 25}
 # Relative share of a large search budget. The higher-volume boards (JobStreet,
 # LinkedIn, Careers@Gov) get more than MCF, per how many listings each carries.
 _WEIGHTS = {"jobstreet": 3, "linkedin": 3, "careersgov": 3, "mycareersfuture": 1}

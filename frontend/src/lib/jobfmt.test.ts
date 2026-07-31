@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Job } from './api'
 import {
-  formatSalary, experienceLabel, monthlySalary, jobTier,
+  formatSalary, salaryFull, postedLabel, experienceLabel, monthlySalary, jobTier,
   applyRefine, refineActive, EMPTY_REFINE, type RefineState,
 } from './jobfmt'
 
@@ -9,23 +9,50 @@ const job = (over: Partial<Job> = {}): Job => ({
   platform: 'mycareersfuture', external_id: 'x', url: '#', title: 'T', company: 'C', location: 'SG', description: '', ...over,
 })
 
-describe('formatSalary', () => {
+describe('formatSalary (K units, keeps posted period)', () => {
   it('formats a monthly range', () => {
-    expect(formatSalary(job({ salary_min: 8000, salary_max: 13500, salary_period: 'monthly' }))).toBe('$8,000–$13,500/mo')
+    expect(formatSalary(job({ salary_min: 8000, salary_max: 13500, salary_period: 'monthly' }))).toBe('$8K–13.5K/mo')
   })
-  it('formats an annual range', () => {
-    expect(formatSalary(job({ salary_min: 60000, salary_max: 90000, salary_period: 'annual' }))).toBe('$60,000–$90,000/yr')
+  it('formats a long annual range compactly', () => {
+    expect(formatSalary(job({ salary_min: 36000, salary_max: 100000, salary_period: 'annual' }))).toBe('$36K–100K/yr')
   })
   it('handles single bounds', () => {
-    expect(formatSalary(job({ salary_max: 8000, salary_period: 'monthly' }))).toBe('Up to $8,000/mo')
-    expect(formatSalary(job({ salary_min: 5000, salary_period: 'monthly' }))).toBe('From $5,000/mo')
+    expect(formatSalary(job({ salary_max: 8000, salary_period: 'monthly' }))).toBe('Up to $8K/mo')
+    expect(formatSalary(job({ salary_min: 5000, salary_period: 'monthly' }))).toBe('From $5K/mo')
   })
-  it('omits the suffix when period is unknown', () => {
-    expect(formatSalary(job({ salary_min: 5000, salary_max: 7000 }))).toBe('$5,000–$7,000')
+  it('omits the suffix when period is unknown; small numbers stay raw', () => {
+    expect(formatSalary(job({ salary_min: 5000, salary_max: 7000 }))).toBe('$5K–7K')
+    expect(formatSalary(job({ salary_min: 500, salary_max: 900, salary_period: 'monthly' }))).toBe('$500–900/mo')
   })
   it('falls back to salary_raw, else null', () => {
     expect(formatSalary(job({ salary_raw: 'Competitive' }))).toBe('Competitive')
     expect(formatSalary(job())).toBeNull()
+  })
+})
+
+describe('salaryFull (tooltip)', () => {
+  it('gives the exact figures', () => {
+    expect(salaryFull(job({ salary_min: 36000, salary_max: 100000, salary_period: 'annual' }))).toBe('$36,000 – $100,000/yr')
+  })
+})
+
+describe('postedLabel', () => {
+  const NOW = Date.parse('2026-08-01T00:00:00Z')
+  it('turns an ISO date into a relative age', () => {
+    expect(postedLabel(job({ posted_date: '2026-08-01T00:00:00Z' }), NOW)).toBe('today')
+    expect(postedLabel(job({ posted_date: '2026-07-29' }), NOW)).toBe('3d ago')
+    expect(postedLabel(job({ posted_date: '2026-07-11' }), NOW)).toBe('3w ago')
+    expect(postedLabel(job({ posted_date: '2026-05-01' }), NOW)).toBe('3mo ago')
+  })
+  it('normalizes board relative text', () => {
+    expect(postedLabel(job({ posted_date: '2d ago' }), NOW)).toBe('2d ago')
+    expect(postedLabel(job({ posted_date: '19h ago' }), NOW)).toBe('19h ago')
+    expect(postedLabel(job({ posted_date: '3 days ago' }), NOW)).toBe('3d ago')
+    expect(postedLabel(job({ posted_date: '1 month ago' }), NOW)).toBe('1mo ago')
+    expect(postedLabel(job({ posted_date: '2 weeks ago' }), NOW)).toBe('2w ago')
+  })
+  it('null when absent', () => {
+    expect(postedLabel(job(), NOW)).toBeNull()
   })
 })
 
