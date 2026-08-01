@@ -135,7 +135,7 @@ sequenceDiagram
     LLM-->>API: tailored markdown (echoes [NAME_0] …)
 
     API->>G: restore_and_verify(tailored, mapping, real cv)
-    Note over G: token replacement (positions changed<br/>by the rewrite; tokens survive at temp 0).<br/>Header force-restored if any token dropped.
+    Note over G: token replacement (positions changed<br/>by the rewrite, tokens survive at temp 0).<br/>Header force-restored if any token dropped.
     G-->>API: real identifiers restored + GuardrailReport
 
     API->>G: lint_resume(real cv, tailored)
@@ -198,7 +198,7 @@ sequenceDiagram
         JS->>Q: cards
     end
     Q-->>API: cards as they arrive
-    API->>API: tag skill have/missing + relevance;<br/>(optional) learned fit score
+    API->>API: tag skill have/missing + relevance,<br/>(optional) learned fit score
     API-->>B: NDJSON — interpreted line, a job line each, done
     B->>API: POST /job/description (on drawer open) — lazy full JD
     B->>API: POST /jobs/enrich/stream (background) — backfill every card's keywords
