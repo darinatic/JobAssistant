@@ -9,8 +9,9 @@ def test_platform_aliases_normalized():
 
 
 def test_max_jobs_clamped():
-    assert SearchQuery(keyword="AI", max_jobs=500).max_jobs == 50
-    assert SearchQuery(keyword="AI", max_jobs=100).max_jobs == 50  # capped at 50
+    assert SearchQuery(keyword="AI", max_jobs=500).max_jobs == 100
+    assert SearchQuery(keyword="AI", max_jobs=100).max_jobs == 100  # ceiling raised to 100
+    assert SearchQuery(keyword="AI", max_jobs=150).max_jobs == 100
     assert SearchQuery(keyword="AI", max_jobs=0).max_jobs == 1
     assert SearchQuery(keyword="AI", max_jobs="lots").max_jobs == 25  # type: ignore[arg-type]
 

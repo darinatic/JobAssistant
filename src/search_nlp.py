@@ -32,7 +32,7 @@ class SearchQuery(BaseModel):
     remote_options: list[str] = Field(
         default_factory=list, description="Any of: on_site, remote, hybrid",
     )
-    max_jobs: int = Field(default=25, description="How many jobs to return (1-50)")
+    max_jobs: int = Field(default=25, description="How many jobs to return (1-100)")
     platforms: list[str] = Field(
         default_factory=list,
         description="Any of: mycareersfuture, linkedin, jobstreet. Empty = all platforms.",
@@ -67,7 +67,9 @@ class SearchQuery(BaseModel):
     @classmethod
     def _clamp_max(cls, v):
         try:
-            return max(1, min(50, int(v)))
+            # Ceiling 100 (2026-08-01, raised from 50). With "only strong fits" on,
+            # the gate over-scrapes up to gate_scrape_cap_mult x this — heavy, but OK.
+            return max(1, min(100, int(v)))
         except (TypeError, ValueError):
             return 25
 

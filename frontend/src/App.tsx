@@ -554,7 +554,7 @@ function Home() {
         )}
 
         <footer style={{ padding: '18px 22px', borderTop: '2px solid var(--ink)', marginTop: 'auto' }}>
-          <span className="ov-micro" style={{ fontSize: 9 }}>overlap · a portfolio project · your cv stays in this browser</span>
+          <span className="ov-micro" style={{ fontSize: 9 }}>overlap · a portfolio project · no account, nothing stored</span>
         </footer>
       </div>
     </div>
@@ -605,7 +605,7 @@ function StageResume({ cv, uploading, onUpload, updateCv, onContinue }: {
         <div className="ov-eyebrow" style={{ marginBottom: 16 }}>step 01 / 03</div>
         <h1 className="ov-h1" style={{ maxWidth: 640 }}>Three boards, read at once.</h1>
         <p className="ov-lead" style={{ marginTop: 20 }}>
-          Scored against your own words. Nothing stored, your CV stays in this browser.
+          Scored against your own words. No account, no database — nothing is stored.
         </p>
         <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 11, border: '2px dashed var(--ink)', padding: '34px 18px', marginTop: 28, cursor: 'pointer', maxWidth: 520 }}>
           <span className="ov-mono" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 26, color: 'var(--ink)' }}>[ + ]</span>
@@ -865,7 +865,7 @@ function ReadoutRail({ insights, analyzing, scoreColor, className }: { insights:
       ) : analyzing ? (
         <div className="ov-micro" style={{ padding: '16px', fontSize: 9 }}>▸ analyzing insights…</div>
       ) : (
-        <div className="ov-micro" style={{ padding: '16px', fontSize: 9, lineHeight: 1.7 }}>cv + results held in localstorage only. nothing server-side.</div>
+        <div className="ov-micro" style={{ padding: '16px', fontSize: 9, lineHeight: 1.7 }}>cv + results live in your browser (localstorage). sent to the ai to search + tailor, never stored.</div>
       )}
     </aside>
   )

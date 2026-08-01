@@ -60,7 +60,7 @@ export default function Landing() {
               <div style={{ borderLeft: '1px solid var(--rule)', display: 'flex', flex: 2 }}>
                 <StatCell num="~1ms" label="match, no llm" />
                 <div style={{ borderLeft: '1px solid var(--rule)', display: 'flex', flex: 1 }}>
-                  <StatCell num="0" label="bytes on our servers" />
+                  <StatCell num="0" label="stored on our servers" />
                 </div>
               </div>
             </div>
@@ -73,7 +73,7 @@ export default function Landing() {
         {/* ---- stage strip (ink) ---- */}
         <section className="ov-3col" style={{ background: 'var(--ink)', borderBottom: '2px solid var(--ink)' }}>
           {[
-            ['01 resume', 'Drop in your CV. It is parsed in your browser and held in localStorage — never uploaded.'],
+            ['01 resume', 'Drop in your CV. We parse the PDF, hand back the markdown, and store nothing — it lives in your browser.'],
             ['02 search', 'Ask in plain language. Three boards are fetched at once and every posting is scored against your words.'],
             ['03 tailor', 'Pick a posting. Get a tailored resume and cover letter, with every added claim labelled.'],
           ].map(([tag, body], i) => (
@@ -238,11 +238,11 @@ export default function Landing() {
 
         {/* ---- CTA (ink) ---- */}
         <section id="try" style={{ scrollMarginTop: 70, background: 'var(--ink)', padding: '64px 44px', borderBottom: '2px solid var(--ink)' }}>
-          <div className="ov-eyebrow" style={{ color: 'var(--paper)', opacity: 0.6, marginBottom: 16 }}>pre-launch · your cv never leaves your browser</div>
+          <div className="ov-eyebrow" style={{ color: 'var(--paper)', opacity: 0.6, marginBottom: 16 }}>pre-launch · no account, nothing stored</div>
           <h2 className="ov-h2" style={{ color: 'var(--paper)', fontSize: 52, letterSpacing: '-0.035em', lineHeight: 1.0, maxWidth: 760 }}>Drop in your CV. See what actually matches.</h2>
           <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--paper)', opacity: 0.85, maxWidth: 520, marginTop: 20 }}>
-            No account, nothing stored on a server, no resume sent to a third party. It runs in your browser and scores
-            against your own words.
+            No account and no database — we store nothing. Your CV is sent to Claude to parse, score, and tailor it,
+            then it's gone.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="ov-btn ov-btn-paper" onClick={openApp}>upload your cv →</button>

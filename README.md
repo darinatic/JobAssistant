@@ -7,7 +7,7 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 1. **Tailor your resume** to a specific job — ATS-safe, keyword-exact, and honest (it never invents skills or history you don't have), rendered to a clean LaTeX PDF.
 2. **Search live jobs** across three platforms at once, showing exactly which of each posting's skills your CV already covers, plus a **job-intel panel** that flags scam/ghost postings.
 
-> **No login, no database.** Your CV is parsed once in the browser and kept in `localStorage`; every request is a pure function of its body. Nothing you upload is stored server-side, so anyone can try it instantly.
+> **No login, no database.** Your CV lives in your browser's `localStorage`; every request is a pure function of its body, so nothing is stored server-side. Uploading, searching, and tailoring do send your CV to the backend and on to the AI (Claude) to do the work — it's processed, never persisted. Anyone can try it instantly.
 
 ---
 
