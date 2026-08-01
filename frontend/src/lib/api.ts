@@ -113,6 +113,14 @@ export interface RedFlag {
   source: string
 }
 
+export interface GuardrailReport {
+  redaction: { counts: Record<string, number>; total: number }
+  all_restored: boolean
+  header_forced: boolean
+  leaks: string[]
+  available: boolean
+}
+
 export interface TailorResult {
   tailored_resume_markdown: string | null
   cover_letter_text: string | null
@@ -123,6 +131,7 @@ export interface TailorResult {
   status: string
   errors: string[]
   honesty?: { kind: string; value: string; detail: string }[]
+  guardrails?: GuardrailReport | null
 }
 
 // --- endpoints --------------------------------------------------------------

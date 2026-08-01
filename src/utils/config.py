@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     rate_limit_per_day: int = 120
 
     generate_cover_letters: bool = True
+
+    # PII guardrail: strip the candidate's direct identifiers (name/email/phone/URL)
+    # from the CV before it is sent to Anthropic, restore them locally afterward.
+    # On by default; fails open (a Presidio error tailors on the real CV). See
+    # src/guardrails. Set false to disable locally for debugging.
+    pii_redaction_enabled: bool = True
+
     headless_mode: bool = False
     browser_slowmo_ms: int = 100
 

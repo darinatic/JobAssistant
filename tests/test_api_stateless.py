@@ -98,8 +98,10 @@ def test_tailor(client):
 
 
 def test_cover_letter_endpoint(client):
+    from src.guardrails import GuardrailReport
     cl = CoverLetter(content="Dear Hiring Manager, ...", word_count=120, personalization_points=[])
-    with patch("src.api.services.cover_letter_for", new=AsyncMock(return_value=cl)):
+    with patch("src.api.services.cover_letter_for",
+               new=AsyncMock(return_value=(cl, GuardrailReport(available=True)))):
         r = client.post("/cover-letter", json={"jd_text": _JD, "resume_markdown": _CV})
     assert r.status_code == 200, r.text
     assert r.json()["cover_letter_text"].startswith("Dear")

@@ -11,6 +11,7 @@ from src.agents import (
     ResumeTailorAgent,
 )
 from src.graph.state import ApplicationState, WorkflowStatus
+from src.guardrails import anonymize, restore, restore_and_verify
 from src.matching import match_local
 from src.utils.config import settings
 
@@ -67,11 +68,24 @@ async def tailor_resume_node(state: ApplicationState) -> ApplicationState:
         return state
 
     try:
+        # PII guardrail: strip the candidate's direct identifiers from the CV before
+        # it reaches the model, tailor the anonymized copy, then restore + verify.
+        # Redaction is LOCAL to this node — state.master_cv is untouched so the local
+        # matcher still sees the real CV. Fails open (anonymize returns the real CV).
+        cv = state.master_cv if state.master_cv is not None else settings.get_master_cv()
+        redaction = anonymize(cv)
         tailored = await resume_tailor.tailor(
-            state.parsed_jd, state.skill_match, master_cv=state.master_cv, style=state.style,
+            state.parsed_jd, state.skill_match, master_cv=redaction.text, style=state.style,
             target_line_budget=state.target_line_budget,
         )
+        restored_md, report = restore_and_verify(tailored.markdown_content, redaction, original_cv=cv)
+        tailored = tailored.model_copy(update={
+            "markdown_content": restored_md,
+            "changes_made": [restore(c, redaction) for c in tailored.changes_made],
+            "keywords_added": [restore(k, redaction) for k in tailored.keywords_added],
+        })
         state.tailored_resume = tailored
+        state.guardrail_report = report
         if state.persist:
             filepath = await resume_tailor.save_tailored_resume(tailored, state.parsed_jd)
             state.tailored_resume_path = str(filepath)
@@ -94,11 +108,15 @@ async def generate_cover_letter_node(state: ApplicationState) -> ApplicationStat
         return state
 
     try:
-        state.cover_letter = await cover_letter_agent.generate(
+        # Same PII guardrail on the cover-letter call, which also sends resume text.
+        redaction = anonymize(state.tailored_resume.markdown_content)
+        tailored_anon = state.tailored_resume.model_copy(update={"markdown_content": redaction.text})
+        cover = await cover_letter_agent.generate(
             parsed_jd=state.parsed_jd,
             skill_match=state.skill_match,
-            tailored_resume=state.tailored_resume,
+            tailored_resume=tailored_anon,
         )
+        state.cover_letter = cover.model_copy(update={"content": restore(cover.content, redaction)})
     except Exception as e:
         # Non-fatal — proceed without cover letter.
         state.errors.append(f"Cover letter generation failed: {e}")
@@ -237,6 +255,7 @@ async def process_job(
             skill_match=result.get("skill_match"),
             tailored_resume=result.get("tailored_resume"),
             cover_letter=result.get("cover_letter"),
+            guardrail_report=result.get("guardrail_report"),
             company_context=result.get("company_context"),
             tailored_resume_path=result.get("tailored_resume_path"),
             cover_letter_path=result.get("cover_letter_path"),

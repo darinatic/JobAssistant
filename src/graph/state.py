@@ -12,6 +12,7 @@ from src.agents.schemas import (
     SkillMatch,
     TailoredResume,
 )
+from src.guardrails.schemas import GuardrailReport
 
 
 class WorkflowStatus(str, Enum):
@@ -59,6 +60,10 @@ class ApplicationState:
 
     tailored_resume_path: str | None = None
     cover_letter_path: str | None = None
+
+    # Advisory PII-guardrail report for the tailor step (what was redacted before the
+    # CV reached the model, and whether every identifier round-tripped). See src/guardrails.
+    guardrail_report: "GuardrailReport | None" = None
 
     # Annotated with `add` so LangGraph merges errors from parallel nodes.
     errors: Annotated[list[str], add] = field(default_factory=list)

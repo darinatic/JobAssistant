@@ -45,11 +45,12 @@ export default function Landing() {
         {/* ---- hero ---- */}
         <section className="ov-hero" style={{ borderBottom: '2px solid var(--ink)' }}>
           <div className="ov-col-divider ov-pad" style={{ paddingTop: 56, paddingBottom: 48 }}>
-            <Eyebrow>singapore · three boards · nothing stored</Eyebrow>
+            <Eyebrow>singapore · pii stripped · nothing stored</Eyebrow>
             <h1 className="ov-h1">Three boards at once. A resume that stays honest.</h1>
             <p className="ov-lead" style={{ marginTop: 22 }}>
               Search MyCareersFuture, LinkedIn and JobStreet in one go. Every posting is scored against your own CV in about
-              a millisecond — no model, no guessing. Then tailor a resume that never invents a line of your history.
+              a millisecond — no model, no guessing. Then tailor a resume that never invents a line of your history, with your
+              name, email and phone stripped before it reaches the AI.
             </p>
             <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
               <button className="ov-btn ov-btn-ink" onClick={openApp}>upload your cv →</button>
@@ -240,9 +241,9 @@ export default function Landing() {
         <section id="try" style={{ scrollMarginTop: 70, background: 'var(--ink)', padding: '64px 44px', borderBottom: '2px solid var(--ink)' }}>
           <div className="ov-eyebrow" style={{ color: 'var(--paper)', opacity: 0.6, marginBottom: 16 }}>pre-launch · no account, nothing stored</div>
           <h2 className="ov-h2" style={{ color: 'var(--paper)', fontSize: 52, letterSpacing: '-0.035em', lineHeight: 1.0, maxWidth: 760 }}>Drop in your CV. See what actually matches.</h2>
-          <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--paper)', opacity: 0.85, maxWidth: 520, marginTop: 20 }}>
-            No account and no database — we store nothing. Your CV is sent to Claude to parse, score, and tailor it,
-            then it's gone.
+          <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--paper)', opacity: 0.85, maxWidth: 540, marginTop: 20 }}>
+            No account and no database — we store nothing. Your name, email, and phone are stripped before your
+            resume reaches the AI; it tailors an anonymized copy, then your details are restored locally.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="ov-btn ov-btn-paper" onClick={openApp}>upload your cv →</button>

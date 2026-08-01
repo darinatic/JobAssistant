@@ -7,7 +7,7 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 1. **Tailor your resume** to a specific job — ATS-safe, keyword-exact, and honest (it never invents skills or history you don't have), rendered to a clean LaTeX PDF.
 2. **Search live jobs** across three platforms at once, showing exactly which of each posting's skills your CV already covers, plus a **job-intel panel** that flags scam/ghost postings.
 
-> **No login, no database.** Your CV lives in your browser's `localStorage`; every request is a pure function of its body, so nothing is stored server-side. Uploading, searching, and tailoring do send your CV to the backend and on to the AI (Claude) to do the work — it's processed, never persisted. Anyone can try it instantly.
+> **No login, no database.** Your CV lives in your browser's `localStorage`; every request is a pure function of its body, so nothing is stored server-side. Uploading and searching send your CV to the backend (skill matching runs locally — no LLM); tailoring sends it on to the AI (Claude), but a **PII guardrail strips your name, email, and phone first**, so the model tailors an anonymized copy and your details are restored locally. Processed, never persisted. Anyone can try it instantly.
 
 ---
 
@@ -15,11 +15,12 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 
 - [How it works](#how-it-works)
   - [Architecture](#architecture)
-  - [Stateless by design](#stateless-by-design)
   - [Resume tailoring](#1-resume-tailoring)
+  - [Privacy: the PII guardrail](#privacy-the-pii-guardrail)
   - [Live job search](#2-live-job-search)
   - [Job-intel panel](#3-job-intel-panel)
   - [The local matching engine](#the-local-matching-engine)
+- [**Architecture deep dive →**](ARCHITECTURE.md)
 - [Tech stack](#tech-stack)
 - [Endpoints](#endpoints)
 - [Setup](#setup)
@@ -32,6 +33,8 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 ---
 
 ## How it works
+
+> **Want the deep technical detail?** The per-feature diagrams — the LangGraph state machine, the PII-guardrail sequence, the concurrent-search + fit-predictor flow, and the honesty model — live in **[ARCHITECTURE.md](ARCHITECTURE.md)**. This section is the overview; each feature links to its deep dive.
 
 ### Architecture
 
@@ -61,34 +64,7 @@ flowchart TB
     SVC -- "response (ephemeral)" --> Client
 ```
 
-### Stateless by design
-
-The CV is uploaded once (PDF → markdown), returned to the client, and kept in `localStorage`. It is then **re-sent in the body of every subsequent request**. Search results and tailored output are ephemeral. There is no auth, no session, and no database — which is what makes it a safe, instantly-shareable demo.
-
-```mermaid
-sequenceDiagram
-    actor U as User
-    participant B as Browser (localStorage)
-    participant A as FastAPI (stateless)
-
-    U->>B: upload resume (PDF)
-    B->>A: POST /resume/parse (multipart)
-    A-->>B: markdown CV (returned, NOT stored)
-    B->>B: keep CV in localStorage
-    Note over B,A: every later request re-sends the CV in its body
-
-    B->>A: POST /search {query, resume_markdown}
-    A-->>B: jobs[] + interpreted filters (ephemeral)
-
-    B->>A: POST /job/description {platform, external_id, url, resume_markdown}
-    A-->>B: full JD + skill overlap
-
-    B->>A: POST /tailor {jd_text, resume_markdown, style}
-    A-->>B: tailored markdown + honesty[]
-
-    B->>A: POST /tailored/resume.pdf {resume_markdown}
-    A-->>B: ATS-safe PDF (never persisted)
-```
+The CV is uploaded once (PDF → markdown), returned to the client, and kept in `localStorage`. It is then **re-sent in the body of every subsequent request**. Search results and tailored output are ephemeral. There is no auth, no session, and no database — which is what makes it a safe, instantly-shareable demo. (Full request lifecycle: [ARCHITECTURE.md → Stateless request lifecycle](ARCHITECTURE.md#stateless-request-lifecycle).)
 
 ### 1. Resume tailoring
 
@@ -103,19 +79,15 @@ Honesty is **code-enforced, not just prompted**: a deterministic **honesty linte
 
 **Two tailoring styles** trade editorial latitude while keeping the honesty rules identical: `faithful` (keep all, reorder/rephrase) · `aggressive` (restructure + cut low-relevance sections, hard 1 page). A **one-page budget estimator** (calibrated so ~55 rendered lines ≈ one page) drives a live "≈1 page ✓ / trim ~N lines" badge as you edit.
 
-```mermaid
-flowchart LR
-    IN["JD text + master CV"] --> P["parse_jd<br/>(Haiku 4.5)"]
-    P --> M["match<br/>(local gazetteer, no LLM)"]
-    M -- "missing_required = hard 'NEVER claim' list" --> T["tailor<br/>(Sonnet 4.5)"]
-    M -- "gap_analysis: surfaceable vs genuine gaps" --> T
-    T --> H["honesty linter<br/>(deterministic, ~1ms)"]
-    H --> OUT["tailored markdown<br/>+ honesty[] advisories"]
-    T -. "separate on-demand button" .-> CL["cover_letter<br/>(Sonnet 4.5)"]
-    OUT --> PDF["Tectonic -> ATS-safe single-column PDF"]
-```
+**→ Deep dive:** the [LangGraph state machine](ARCHITECTURE.md#resume-tailoring-pipeline) and the [code-enforced honesty model](ARCHITECTURE.md#honesty-enforcement).
 
 The tailored resume (and the uploaded CV) are edited in a **WYSIWYG editor** — rich-text on the surface, markdown as the source of truth — with a **side-by-side live preview** that approximates the final layout and shows the one-page badge as you type. A **Fit to page** action re-tailors to the nearest full page when content spills a small remainder onto an under-used extra page. The PDF renders from your edits via an ATS-safe single-column LaTeX template (Roboto, T1/ToUnicode so text extracts cleanly, plain `\section`, no tables/multicol/floats) compiled by **Tectonic**. Output is never stored.
+
+### Privacy: the PII guardrail
+
+Tailoring is the one step that sends your CV to a third party (Claude). Before it does, a **deterministic, dependency-free guardrail** (`src/guardrails/`) strips your direct identifiers — name, email, phone, profile URLs — and replaces each with a placeholder token (`<NAME_0>`, `<EMAIL_0>`…). The model tailors an *anonymized* copy; your real details are restored locally from the mapping afterward. It is **header-anchored** (the name is the `# ` H1; email is matched document-wide; phone/URL only in the contact header) so it never touches the skills, companies, or metrics the tailor needs — no NER, no false positives, ~1 ms. The contact header is force-restored from your original CV if any token fails to round-trip, and the whole layer **fails open** (an error tailors on the real CV, never blocks). `/tailor` and `/cover-letter` return an advisory `guardrails` report the UI shows ("N identifiers stripped before the AI · restored locally").
+
+**→ Deep dive:** [the redact → tailor → restore → verify sequence, and why deterministic beat NER](ARCHITECTURE.md#pii-guardrail).
 
 ### 2. Live job search
 
@@ -123,25 +95,7 @@ A natural-language query ("50 remote AI Engineer jobs on JobStreet this week") i
 
 To stay fast and avoid tripping platform soft-walls, LinkedIn/JobStreet return **cards only**; full descriptions are fetched **on demand** when a job is opened, and every card's keywords are **backfilled in the background** after the first render. Each job is tagged with per-JD skill have/missing and a relevance score against the CV. Large searches (up to 300) spread a **weighted per-platform budget** so a fast source can't starve the slower ones, and an optional **learned fit predictor** re-ranks the combined results — surfaced as a relative **Strong / Moderate / Weak** tier plus a *top-fit* marker, not a misleading absolute score.
 
-```mermaid
-flowchart TB
-    Q["Natural-language query<br/>e.g. '50 remote AI jobs on JobStreet this week'"] --> NLP["parse_search_query<br/>(Haiku 4.5)"]
-    NLP --> F["structured filters<br/>keyword · location · recency · seniority · remote · count · platforms"]
-    F --> S["search_jobs — 3 platforms run CONCURRENTLY"]
-
-    S --> MCF["MyCareersFuture<br/>JSON /v2/jobs · full JD inline"]
-    S --> LI["LinkedIn<br/>guest HTML · cards only"]
-    S --> JS["JobStreet<br/>Patchright browser · cards only"]
-
-    MCF --> QU["asyncio.Queue<br/>(yield cards as they arrive)"]
-    LI --> QU
-    JS --> QU
-    QU --> RANK["tag per-job skill have/missing<br/>+ relevance vs CV, rank"]
-    RANK --> UI["SPA listing (NDJSON stream)"]
-
-    UI -. "open a job in the drawer" .-> DESC["POST /job/description<br/>lazy full JD + skill split"]
-    UI -. "after first render (background)" .-> ENR["POST /jobs/enrich/stream<br/>backfill every card's keywords"]
-```
+**→ Deep dive:** [the concurrent-scrape + NDJSON streaming sequence, and the fit-predictor gated-vs-ungated fork](ARCHITECTURE.md#live-job-search).
 
 **Insights** (`/insights`) is a deterministic, no-LLM aggregation over the current result set: most in-demand skills, which you have, coverage, salary range, platform mix.
 
@@ -153,15 +107,11 @@ Opening a job in the drawer runs a **deterministic-first**, stateless legitimacy
 
 > A **contacts** tool (email-pattern / LinkedIn-poster inference) previously shipped here but was removed in 2026-07 — it could only ever resolve the company email *domain*, not a specific person's address.
 
-```mermaid
-flowchart TB
-    OPEN["Open a job in the drawer"] --> RF["POST /job/red-flags<br/>(auto, deterministic, no LLM)"]
-    RF --> RFO["Red-flag list, cited to FTC / SPF / MOM<br/>advisory · never blocks"]
-```
+**→ Deep dive:** [the red-flag scan](ARCHITECTURE.md#job-intel-panel).
 
 ### The local matching engine
 
-`src/matching/` is a curated AI/ML/data/cloud **skills gazetteer** (canonical terms → aliases) plus a deterministic phrase matcher. It resolves `torch → PyTorch`, `k8s → Kubernetes`, handles `C++`/`C#`/`Node.js`, and avoids false hits (`java` inside `javascript`, a bare `go`). It powers per-job skill overlap, the tailoring pipeline's honesty gate, search-result ranking, and insights — **free, ~1 ms, exact-repeatable**, with no LLM call per job.
+`src/matching/` is a curated AI/ML/data/cloud **skills gazetteer** (canonical terms → aliases) plus a deterministic phrase matcher. It resolves `torch → PyTorch`, `k8s → Kubernetes`, handles `C++`/`C#`/`Node.js`, and avoids false hits (`java` inside `javascript`, a bare `go`). It powers per-job skill overlap, the tailoring pipeline's honesty gate, search-result ranking, and insights — **free, ~1 ms, exact-repeatable**, with no LLM call per job. (See [ARCHITECTURE.md → Local matching engine](ARCHITECTURE.md#local-matching-engine).)
 
 ---
 
@@ -173,6 +123,7 @@ flowchart TB
 | **Agents** | LangGraph + LangChain + `langchain-anthropic` | Orchestrates `parse_jd → match → tailor → cover_letter` |
 | **LLM** | Anthropic **Claude Haiku 4.5** (JD parse, NL query, JD clean-up) + **Sonnet 4.5** (tailor, cover letter) | Cheap model for parsing, quality model for writing |
 | **Matching** | Local gazetteer matcher (`src/matching/`) | Deterministic skill scoring, no LLM, ~1 ms |
+| **Privacy** | Deterministic PII guardrail (`src/guardrails/`) | Strips name/email/phone/URL from the CV before it reaches Claude, restored locally; no deps, ~1 ms |
 | **Resume in** | `markitdown` | Uploaded resume PDF → markdown |
 | **Resume out** | Markdown → LaTeX → **Tectonic** (`-X compile`) | ATS-safe single-column PDF; never stored |
 | **Scrapers** | `httpx` + `beautifulsoup4` (LinkedIn guest, MyCareersFuture JSON), **Patchright** (JobStreet stealth browser) | Live multi-platform search |
@@ -210,8 +161,8 @@ No auth headers — all endpoints are open (CORS-limited to configured origins).
 | `POST` | `/job/red-flags` | `{description, company, salary_*, url, posted_date}` → `{flags[]}` (deterministic, no LLM) |
 | `POST` | `/score` | `{jd_text, resume_markdown}` → match + gap split (no LLM scoring; 1 Haiku parse) |
 | `POST` | `/insights` | `{jobs[], resume_markdown?}` → deterministic skill-demand aggregation (no LLM) |
-| `POST` | `/tailor` | `{jd_text, resume_markdown, style?, concise?, target_pages?}` → tailored resume + `honesty[]` |
-| `POST` | `/cover-letter` | `{jd_text, resume_markdown}` → cover letter |
+| `POST` | `/tailor` | `{jd_text, resume_markdown, style?, concise?, target_pages?}` → tailored resume + `honesty[]` + `guardrails` (PII report) |
+| `POST` | `/cover-letter` | `{jd_text, resume_markdown}` → cover letter + `guardrails` |
 | `POST` | `/extract-jd` | `{url}` → JD text scraped + cleaned from a URL |
 | `POST` | `/tailored/resume.pdf` | `{resume_markdown, download?}` → PDF |
 | `POST` | `/tailored/cover-letter.pdf` | `{cover_letter_text, download?}` → PDF |

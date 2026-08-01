@@ -20,6 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src import search as job_search
 from src import services
 from src.agents.schemas import SkillMatch
+from src.guardrails import GuardrailReport
 from src.logging_setup import configure_logging
 from src.matching import extract_skills, gap_analysis, lint_resume
 from src.rate_limit import RateLimitMiddleware
@@ -193,6 +194,8 @@ class CoverLetterRequest(BaseModel):
 class CoverLetterResponse(BaseModel):
     cover_letter_text: str
     word_count: int
+    # PII-guardrail report for the cover-letter LLM call (what was redacted before send).
+    guardrails: GuardrailReport | None = None
 
 
 class ExtractJdRequest(BaseModel):
@@ -215,6 +218,9 @@ class TailorResponse(BaseModel):
     # Deterministic honesty check over (CV → tailored): each {kind, value, detail}
     # is a skill/metric/domain in the output not found in the CV. Empty = clean.
     honesty: list[dict] = Field(default_factory=list)
+    # PII-guardrail report: what was stripped from the CV before it reached the model,
+    # and whether every identifier round-tripped. None when redaction was unavailable.
+    guardrails: GuardrailReport | None = None
 
 
 class ResumePdfRequest(BaseModel):
@@ -468,14 +474,17 @@ async def tailor(req: TailorRequest) -> TailorResponse:
         status=result.status,
         errors=result.errors,
         honesty=honesty,
+        guardrails=result.guardrail_report,
     )
 
 
 @app.post("/cover-letter", response_model=CoverLetterResponse)
 async def cover_letter(req: CoverLetterRequest) -> CoverLetterResponse:
     """Generate a cover letter for an (already tailored) resume + JD."""
-    cl = await services.cover_letter_for(req.jd_text, req.resume_markdown)
-    return CoverLetterResponse(cover_letter_text=cl.content, word_count=cl.word_count)
+    cl, guardrails = await services.cover_letter_for(req.jd_text, req.resume_markdown)
+    return CoverLetterResponse(
+        cover_letter_text=cl.content, word_count=cl.word_count, guardrails=guardrails
+    )
 
 
 @app.post("/extract-jd", response_model=ExtractJdResponse)

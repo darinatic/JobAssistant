@@ -1,7 +1,7 @@
 import { Component, type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
-import { api, ApiError, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
+import { api, ApiError, type GuardrailReport, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
@@ -104,6 +104,41 @@ function SkillChip({ skill, tone, added, onToggle }: {
     >
       {skill}{added ? '  ×' : '  +'}
     </button>
+  )
+}
+
+const PII_LABEL: Record<string, string> = {
+  NAME: 'name', EMAIL: 'email', PHONE: 'phone', URL: 'profile links',
+}
+
+// PII guardrail readout — what was stripped from the CV before it reached the AI,
+// and whether every identifier was restored locally afterward.
+function GuardrailPanel({ report }: { report?: GuardrailReport | null }) {
+  if (!report) return null
+  if (!report.available) {
+    return (
+      <div style={{ border: '1px solid var(--honesty)', background: 'color-mix(in oklab, var(--honesty) 8%, transparent)', padding: 12 }}>
+        <div className="ov-micro" style={{ color: 'var(--honesty)', fontSize: 9 }}>pii guardrail unavailable</div>
+        <p style={{ fontSize: 12, color: 'var(--body)', marginTop: 4 }}>Tailored on your full CV this time — redaction couldn't run.</p>
+      </div>
+    )
+  }
+  const parts = Object.entries(report.redaction.counts).map(([k, n]) => `${PII_LABEL[k] ?? k.toLowerCase()} ×${n}`)
+  const accent = report.header_forced ? 'var(--honesty)' : 'var(--have)'
+  return (
+    <div style={{ border: `1px solid ${accent}`, background: `color-mix(in oklab, ${accent} 7%, transparent)`, padding: 12 }}>
+      <div className="ov-micro" style={{ color: accent, fontSize: 9, marginBottom: 6 }}>
+        ▸ pii guardrail · {report.redaction.total} identifier{report.redaction.total === 1 ? '' : 's'} stripped before the ai
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--body)', marginBottom: 4 }}>
+        Removed before sending: {parts.length ? parts.join(' · ') : 'none found'}. The AI tailored an anonymized copy; your details were restored locally.
+      </p>
+      <p style={{ fontSize: 11, color: report.header_forced ? 'var(--honesty)' : 'var(--dim)' }}>
+        {report.header_forced
+          ? '⚠ a token did not round-trip — your contact header was restored from your CV.'
+          : '✓ all identifiers restored locally.'}
+      </p>
+    </div>
   )
 }
 
@@ -865,7 +900,7 @@ function ReadoutRail({ insights, analyzing, scoreColor, className }: { insights:
       ) : analyzing ? (
         <div className="ov-micro" style={{ padding: '16px', fontSize: 9 }}>▸ analyzing insights…</div>
       ) : (
-        <div className="ov-micro" style={{ padding: '16px', fontSize: 9, lineHeight: 1.7 }}>cv + results live in your browser (localstorage). sent to the ai to search + tailor, never stored.</div>
+        <div className="ov-micro" style={{ padding: '16px', fontSize: 9, lineHeight: 1.7 }}>cv + results live in your browser (localstorage). name, email + phone are stripped before the ai tailors it, then restored locally. never stored.</div>
       )}
     </aside>
   )
@@ -1016,6 +1051,9 @@ function StageTailor(p: TailorProps) {
                   ))}
                 </div>
               )}
+
+              {/* pii guardrail readout */}
+              <GuardrailPanel report={result.guardrails} />
 
               {/* export bar */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>

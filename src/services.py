@@ -19,6 +19,7 @@ from src.agents.schemas import (
 )
 from src.graph import process_job
 from src.graph.state import ApplicationState
+from src.guardrails import GuardrailReport, anonymize, restore, summary_report
 from src.matching import match_local
 from src.utils.config import settings
 
@@ -32,6 +33,7 @@ class TailoringResult:
     tailored_resume_path: str | None
     status: str
     errors: list[str]
+    guardrail_report: GuardrailReport | None = None
 
     @classmethod
     def from_state(cls, state: ApplicationState) -> "TailoringResult":
@@ -43,6 +45,7 @@ class TailoringResult:
             tailored_resume_path=state.tailored_resume_path,
             status=state.status.value,
             errors=list(state.errors),
+            guardrail_report=state.guardrail_report,
         )
 
 
@@ -137,12 +140,19 @@ async def cover_letter_for(
     jd_text: str,
     resume_markdown: str,
     master_cv: str | None = None,
-) -> CoverLetter:
+) -> tuple[CoverLetter, GuardrailReport]:
     """Standalone cover letter for an (already tailored) resume — parse the JD,
-    match against the resume, then generate. Used by the separate CL button."""
+    match against the resume, then generate. Used by the separate CL button.
+    Returns the letter plus the PII-guardrail report for that call."""
     parsed = await parse_jd(jd_text)
+    # Match on the REAL resume (deterministic, local — no LLM, no third party).
     match = await score_jd(parsed, master_cv=master_cv or resume_markdown)
-    tailored = TailoredResume(markdown_content=resume_markdown, changes_made=[], keywords_added=[])
-    return await generate_cover_letter(parsed, match, tailored)
+    # PII guardrail: the cover-letter LLM call sees an anonymized resume; restore
+    # the identifiers (e.g. the signed name) locally. Fails open.
+    redaction = anonymize(resume_markdown)
+    tailored = TailoredResume(markdown_content=redaction.text, changes_made=[], keywords_added=[])
+    cover = await generate_cover_letter(parsed, match, tailored)
+    restored = cover.model_copy(update={"content": restore(cover.content, redaction)})
+    return restored, summary_report(redaction)
 
 
