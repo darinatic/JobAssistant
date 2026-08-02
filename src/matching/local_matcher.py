@@ -14,11 +14,14 @@ buckets that the tailoring phase must treat differently:
   / skill-gap path.
 """
 
+import logging
 from dataclasses import dataclass, field
 
 from src.agents.schemas import MatchRecommendation, ParsedJobDescription, SkillMatch
 from src.agents.skills_matcher import _skill_appears_in_cv
 from src.matching.gazetteer import canonicalize, extract_skills
+
+log = logging.getLogger(__name__)
 
 
 def _has_skill(skill: str, cv_canon: set[str], cv_lower: str) -> bool:
@@ -40,8 +43,10 @@ def _recommendation(score: int) -> MatchRecommendation:
 def match_local(parsed_jd: ParsedJobDescription, master_cv: str) -> SkillMatch:
     """Score a candidate↔job match deterministically, with no LLM call.
 
-    Weighting mirrors the previous heuristic/LLM prompt (60% required coverage,
-    25% preferred, 15% baseline) so scores stay comparable across the migration.
+    Flat scoring over the JD's skills (required + preferred pooled equally): the
+    score is the % of the job's skills the CV covers, so it equals the search-card
+    relevance for the same skill set. In the live app the JD's skills come from the
+    gazetteer (see :func:`reconcile_jd_skills`), so search and tailor stay aligned.
     """
     cv_lower = master_cv.lower()
     cv_canon = extract_skills(master_cv)
@@ -51,11 +56,9 @@ def match_local(parsed_jd: ParsedJobDescription, master_cv: str) -> SkillMatch:
     matched_pref = [s for s in parsed_jd.preferred_skills if _has_skill(s, cv_canon, cv_lower)]
     missing_pref = [s for s in parsed_jd.preferred_skills if s not in matched_pref]
 
-    req_total = max(1, len(parsed_jd.required_skills))
-    req_ratio = len(matched_req) / req_total
-    pref_ratio = (len(matched_pref) / len(parsed_jd.preferred_skills)) if parsed_jd.preferred_skills else 0.0
-
-    score = max(0, min(100, int(round(60 * req_ratio + 25 * pref_ratio + 15))))
+    total = max(1, len(parsed_jd.required_skills) + len(parsed_jd.preferred_skills))
+    matched_count = len(matched_req) + len(matched_pref)
+    score = round(100 * matched_count / total)
 
     # Transferable: skills the candidate genuinely has that the JD names in its
     # tech stack (or preferred) but not among required — a soft "adjacent" signal.
@@ -64,9 +67,7 @@ def match_local(parsed_jd: ParsedJobDescription, master_cv: str) -> SkillMatch:
     transferable = sorted((cv_canon & jd_context_canon) - matched_canon)[:8]
 
     reasoning = (
-        f"{len(matched_req)}/{len(parsed_jd.required_skills)} required and "
-        f"{len(matched_pref)}/{len(parsed_jd.preferred_skills)} preferred skills matched "
-        f"(deterministic gazetteer match)."
+        f"{matched_count}/{total} of the job's skills matched (deterministic gazetteer match)."
     )
 
     return SkillMatch(
@@ -89,6 +90,31 @@ def rough_relevance(jd_text: str, master_cv: str) -> int:
         return 0
     cv_skills = extract_skills(master_cv)
     return round(100 * len(jd_skills & cv_skills) / len(jd_skills))
+
+
+def reconcile_jd_skills(parsed_jd: ParsedJobDescription, jd_text: str) -> None:
+    """Make the gazetteer the single source of the JD's skills, so search and
+    tailoring agree on the same set (and the tailor stops surfacing Haiku's noisy
+    soft-skill phrases).
+
+    Haiku still parses the JD's *structure* (title, company, seniority,
+    responsibilities); this replaces its free-form skill lists with the
+    deterministic gazetteer over the same text. Any skill Haiku named that the
+    gazetteer doesn't recognize is logged as a growth candidate — the seed for a
+    future curation pipeline that feeds new entries into the taxonomy. Mutates
+    ``parsed_jd`` in place.
+    """
+    haiku_skills = list(dict.fromkeys(
+        parsed_jd.required_skills + parsed_jd.preferred_skills + parsed_jd.tech_stack
+    ))
+    candidates = [s for s in haiku_skills if canonicalize(s) is None]
+    if candidates:
+        log.info("gazetteer_growth_candidates title=%r candidates=%s", parsed_jd.title, candidates)
+
+    parsed_jd.required_skills = sorted(extract_skills(f"{parsed_jd.title}\n{jd_text}"))
+    parsed_jd.preferred_skills = []
+    parsed_jd.tech_stack = []
+    parsed_jd.keywords_for_resume = []
 
 
 @dataclass

@@ -11,6 +11,7 @@ from src.matching.local_matcher import (
     GapAnalysis,
     gap_analysis,
     match_local,
+    reconcile_jd_skills,
     rough_relevance,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "match_local",
     "gap_analysis",
     "GapAnalysis",
+    "reconcile_jd_skills",
     "rough_relevance",
     "lint_resume",
     "HonestyReport",

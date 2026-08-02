@@ -10,6 +10,15 @@ from src.agents.schemas import ParsedJobDescription
 from src.prompts import get_prompt
 from src.utils.config import settings
 
+
+def _reconcile_skills(parsed: ParsedJobDescription, jd_text: str) -> None:
+    """Replace Haiku's free-form skill lists with the deterministic gazetteer so
+    search and tailoring agree on the JD's skills. Lazy import avoids an import
+    cycle (matching → agents.schemas)."""
+    from src.matching import reconcile_jd_skills
+    reconcile_jd_skills(parsed, jd_text)
+
+
 _HUMAN_PROMPT_TEMPLATE = """Parse the following job description and extract all relevant information.
 
 Job Description:
@@ -50,6 +59,7 @@ class JDParserAgent:
         )
         result.source_url = source_url
         result.platform = platform or self._detect_platform(source_url)
+        _reconcile_skills(result, jd_text)
         return result
 
     def parse_sync(
@@ -63,6 +73,7 @@ class JDParserAgent:
         )
         result.source_url = source_url
         result.platform = platform or self._detect_platform(source_url)
+        _reconcile_skills(result, jd_text)
         return result
 
     async def parse_from_url(self, url: str) -> ParsedJobDescription:

@@ -141,20 +141,11 @@ class ResumeTailorAgent:
 **Location**: {parsed_jd.location}
 **Experience Level**: {parsed_jd.experience_level.value}
 
-### Required Skills (PRIORITIZE THESE)
+### Skills the Job Asks For (PRIORITIZE THESE)
 {self._format_list(parsed_jd.required_skills)}
-
-### Preferred Skills
-{self._format_list(parsed_jd.preferred_skills)}
-
-### Tech Stack
-{', '.join(parsed_jd.tech_stack) if parsed_jd.tech_stack else 'Not specified'}
 
 ### Key Responsibilities
 {self._format_list(parsed_jd.responsibilities[:5])}
-
-### Keywords to Incorporate
-{', '.join(parsed_jd.keywords_for_resume)}
 
 ## Match Analysis
 

@@ -5,7 +5,7 @@ Pure, deterministic, no LLM — these run everywhere and fast.
 
 from src.agents.schemas import ExperienceLevel, MatchRecommendation, ParsedJobDescription
 from src.matching.gazetteer import canonicalize, extract_skills
-from src.matching.local_matcher import gap_analysis, match_local
+from src.matching.local_matcher import gap_analysis, match_local, reconcile_jd_skills
 
 
 def _jd(required=None, preferred=None, tech_stack=None) -> ParsedJobDescription:
@@ -69,8 +69,8 @@ def test_match_local_scores_and_buckets():
     assert set(m.matched_required) == {"Python", "PyTorch", "RAG"}
     assert m.missing_required == ["Kubernetes"]
     assert set(m.matched_preferred) == {"AWS", "FastAPI"}
-    # 3/4 required (0.75) + 2/2 preferred (1.0) + baseline: 60*.75 + 25 + 15 = 85
-    assert m.overall_score == 85
+    # Flat pool: 5 of 6 skills matched (Python, PyTorch, RAG, AWS, FastAPI; Kubernetes not) → 83.
+    assert m.overall_score == 83
     assert m.recommendation == MatchRecommendation.APPLY
 
 
@@ -78,7 +78,7 @@ def test_match_local_weak_match_skips():
     jd = _jd(required=["Rust", "Scala", "Hadoop", "Kafka"])
     m = match_local(jd, "Python and PyTorch only.")
     assert m.matched_required == []
-    assert m.overall_score == 15  # baseline only
+    assert m.overall_score == 0  # no overlap → 0, same basis as search relevance
     assert m.recommendation == MatchRecommendation.SKIP
 
 
@@ -108,3 +108,32 @@ def test_gap_analysis_all_backed_skills_surface():
     gaps = gap_analysis(jd, "Python developer.")
     assert gaps.surfaceable_skills == ["Python"]     # in the CV → honest to feature
     assert gaps.genuine_gaps == ["Rust"]             # not in the CV → gap
+
+
+# --- reconcile: gazetteer is the single source of JD skills (search ↔ tailor) ---
+def test_reconcile_aligns_tailor_skills_with_search():
+    """After reconcile, the tailor's JD skills equal what search's gazetteer would
+    extract from the same text — so the two stages can't disagree on the count."""
+    jd_text = (
+        "We need Python, PyTorch and RAG. Bonus: Kubernetes. Strong stakeholder "
+        "collaboration and a drive for innovation."
+    )
+    jd = _jd(
+        required=["Python", "Stakeholder collaboration", "Innovation driving"],
+        preferred=["Machine Learning"],
+        tech_stack=["PyTorch"],
+    )
+    reconcile_jd_skills(jd, jd_text)
+
+    assert jd.required_skills == sorted(extract_skills(f"{jd.title}\n{jd_text}"))
+    assert {"Python", "PyTorch", "RAG", "Kubernetes"} <= set(jd.required_skills)
+    assert "Stakeholder collaboration" not in jd.required_skills  # soft-skill noise dropped
+    assert jd.preferred_skills == [] and jd.tech_stack == [] and jd.keywords_for_resume == []
+
+
+def test_reconcile_logs_unknown_haiku_skills_as_growth_candidates(caplog):
+    jd = _jd(required=["Python", "Stakeholder collaboration"], tech_stack=["Widget wrangling"])
+    with caplog.at_level("INFO"):
+        reconcile_jd_skills(jd, "A Python role.")
+    assert "gazetteer_growth_candidates" in caplog.text
+    assert "Stakeholder collaboration" in caplog.text  # unknown to the gazetteer → candidate
