@@ -34,7 +34,7 @@ export default function Landing() {
         <header style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'stretch', background: 'var(--surface)', borderBottom: '2px solid var(--ink)' }}>
           <a href="/" style={{ background: 'var(--ink)', color: 'var(--paper)', fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 15, letterSpacing: '0.02em', padding: '14px 18px', textDecoration: 'none', display: 'flex', alignItems: 'center' }}>OVERLAP</a>
           <nav className="ov-hide-sm" style={{ display: 'flex', alignItems: 'center', gap: 26, padding: '0 24px' }}>
-            {[['#speed', 'concurrency'], ['#honesty', 'honesty'], ['#build', 'how it\'s built']].map(([href, label]) => (
+            {[['#speed', 'concurrency'], ['#honesty', 'honesty'], ['#privacy', 'privacy'], ['#build', 'how it\'s built']].map(([href, label]) => (
               <a key={href} href={href} className="ov-micro" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textDecoration: 'none' }}>{label}</a>
             ))}
           </nav>
@@ -45,7 +45,7 @@ export default function Landing() {
         {/* ---- hero ---- */}
         <section className="ov-hero" style={{ borderBottom: '2px solid var(--ink)' }}>
           <div className="ov-col-divider ov-pad" style={{ paddingTop: 56, paddingBottom: 48 }}>
-            <Eyebrow>singapore · pii stripped · nothing stored</Eyebrow>
+            <Eyebrow>singapore · pii stripped · cv never stored</Eyebrow>
             <h1 className="ov-h1">Three boards at once. A resume that stays honest.</h1>
             <p className="ov-lead" style={{ marginTop: 22 }}>
               Search MyCareersFuture, LinkedIn and JobStreet in one go. Every posting is scored against your own CV in about
@@ -61,7 +61,7 @@ export default function Landing() {
               <div style={{ borderLeft: '1px solid var(--rule)', display: 'flex', flex: 2 }}>
                 <StatCell num="~1ms" label="match, no llm" />
                 <div style={{ borderLeft: '1px solid var(--rule)', display: 'flex', flex: 1 }}>
-                  <StatCell num="0" label="stored on our servers" />
+                  <StatCell num="0" label="résumés stored" />
                 </div>
               </div>
             </div>
@@ -74,7 +74,7 @@ export default function Landing() {
         {/* ---- stage strip (ink) ---- */}
         <section className="ov-3col" style={{ background: 'var(--ink)', borderBottom: '2px solid var(--ink)' }}>
           {[
-            ['01 resume', 'Drop in your CV. We parse the PDF, hand back the markdown, and store nothing — it lives in your browser.'],
+            ['01 resume', 'Drop in your CV. We parse the PDF, hand back the markdown, and never keep it — it lives in your browser.'],
             ['02 search', 'Ask in plain language. Three boards are fetched at once and every posting is scored against your words.'],
             ['03 tailor', 'Pick a posting. Get a tailored resume and cover letter, with every added claim labelled.'],
           ].map(([tag, body], i) => (
@@ -175,10 +175,48 @@ export default function Landing() {
         {/* ---- 04 resume & cover letter ---- */}
         <ResumeSection />
 
-        {/* ---- 05 legitimacy ---- */}
+        {/* ---- 05 privacy / pii guardrail ---- */}
+        <section id="privacy" className="ov-2col ov-reverse" style={{ scrollMarginTop: 70, borderBottom: '2px solid var(--ink)' }}>
+          {/* demo left */}
+          <div className="ov-order-demo ov-col-divider ov-pad" style={{ background: 'var(--panel)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ border: '2px solid var(--ink)', background: 'var(--surface)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--rule)' }}>
+                <span className="ov-micro" style={{ fontSize: 9 }}>what the ai sees · pii stripped</span>
+                <span className="ov-stamp ov-stamp-have">4 removed</span>
+              </div>
+              <div style={{ padding: '14px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--body)', lineHeight: 1.7 }}>
+                <div style={{ color: 'var(--ink)', fontWeight: 700 }}>{'# <NAME_0>'}</div>
+                <div>{'<EMAIL_0> | <PHONE_0> | <URL_0> | Singapore'}</div>
+                <div style={{ marginTop: 8, color: 'var(--dim)' }}>## Summary</div>
+                <div>AI engineer with production LLM and RAG experience.</div>
+              </div>
+              <div className="ov-micro" style={{ fontSize: 9, padding: '0 14px 12px' }}>name · email · phone · links → placeholders, before it leaves</div>
+            </div>
+            <div style={{ border: '2px solid var(--ink)', background: 'var(--surface)', padding: '14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="ov-stamp ov-stamp-have">restored</span>
+              <span style={{ fontSize: 14, color: 'var(--ink)' }}>your real name, email and phone are put back locally after the model returns.</span>
+            </div>
+          </div>
+          {/* text right */}
+          <div className="ov-order-text ov-pad">
+            <Eyebrow>05 · privacy</Eyebrow>
+            <h2 className="ov-h2">Your name never reaches the AI.</h2>
+            <p className="ov-copy" style={{ marginTop: 20 }}>
+              Tailoring sends your résumé to a third-party model. Before it does, a deterministic guardrail strips the direct
+              identifiers — name, email, phone, profile links — and swaps in placeholders. The model tailors an anonymized
+              copy; your details are restored on our side afterward.
+            </p>
+            <p className="ov-copy">
+              No name-detection model, no guesswork, about a millisecond — and it fails open, so a hiccup never blocks your
+              tailoring. Your résumé itself is never stored.
+            </p>
+          </div>
+        </section>
+
+        {/* ---- 06 legitimacy ---- */}
         <section className="ov-2col" style={{ borderBottom: '2px solid var(--ink)' }}>
           <div className="ov-col-divider ov-pad">
-            <Eyebrow color="var(--gap)">05 · legitimacy check</Eyebrow>
+            <Eyebrow color="var(--gap)">06 · legitimacy check</Eyebrow>
             <h2 className="ov-h2">It tells you when a posting smells wrong.</h2>
             <p className="ov-copy" style={{ marginTop: 20 }}>
               Ghost listings, unlicensed recruiters, month-old reposts — checked against MOM licensing rules and known
@@ -214,7 +252,7 @@ export default function Landing() {
         {/* ---- 06 how it's built ---- */}
         <section id="build" style={{ scrollMarginTop: 70, borderBottom: '2px solid var(--ink)' }}>
           <div style={{ padding: '52px 44px 32px' }}>
-            <Eyebrow>06 · how it's built</Eyebrow>
+            <Eyebrow>07 · how it's built</Eyebrow>
             <h2 className="ov-h2" style={{ fontSize: 38, maxWidth: 820, lineHeight: 1.08 }}>Three decisions the whole product rests on.</h2>
           </div>
           <div className="ov-3col" style={{ borderTop: '1px solid var(--rule)' }}>
@@ -231,7 +269,7 @@ export default function Landing() {
             ))}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', borderTop: '1px solid var(--rule)' }}>
-            {['react', 'typescript', 'vite', 'tailwind', 'fastapi', 'playwright', 'claude haiku + sonnet', 'latex / tectonic', 'localstorage only'].map((s, i) => (
+            {['react', 'typescript', 'vite', 'tailwind', 'fastapi', 'playwright', 'claude haiku + sonnet', 'latex / tectonic', 'supabase'].map((s, i) => (
               <span key={s} className="ov-micro" style={{ fontSize: 10, padding: '11px 16px', borderRight: i < 8 ? '1px solid var(--rule)' : undefined }}>{s}</span>
             ))}
           </div>
@@ -239,11 +277,11 @@ export default function Landing() {
 
         {/* ---- CTA (ink) ---- */}
         <section id="try" style={{ scrollMarginTop: 70, background: 'var(--ink)', padding: '64px 44px', borderBottom: '2px solid var(--ink)' }}>
-          <div className="ov-eyebrow" style={{ color: 'var(--paper)', opacity: 0.6, marginBottom: 16 }}>pre-launch · no account, nothing stored</div>
+          <div className="ov-eyebrow" style={{ color: 'var(--paper)', opacity: 0.6, marginBottom: 16 }}>pre-launch · no account · cv never stored</div>
           <h2 className="ov-h2" style={{ color: 'var(--paper)', fontSize: 52, letterSpacing: '-0.035em', lineHeight: 1.0, maxWidth: 760 }}>Drop in your CV. See what actually matches.</h2>
-          <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--paper)', opacity: 0.85, maxWidth: 540, marginTop: 20 }}>
-            No account and no database — we store nothing. Your name, email, and phone are stripped before your
-            resume reaches the AI; it tailors an anonymized copy, then your details are restored locally.
+          <p style={{ fontSize: 17, lineHeight: 1.6, color: 'var(--paper)', opacity: 0.85, maxWidth: 560, marginTop: 20 }}>
+            No account, and your résumé is never stored. Your name, email, and phone are stripped before it reaches the AI,
+            which tailors an anonymized copy — then your details are restored locally.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
             <button className="ov-btn ov-btn-paper" onClick={openApp}>upload your cv →</button>

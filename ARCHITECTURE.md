@@ -18,7 +18,7 @@ The technical companion to the [README](README.md). The README is the overview �
 
 ## System overview
 
-A React SPA holds all state (CV + results) in `localStorage` and re-sends the CV in the body of every request. The FastAPI backend is a set of **pure functions of the request body** — no auth, no session, no database. It fans out to Claude for the language-heavy steps, a local deterministic matcher for scoring (no LLM), Tectonic for PDF, and three job scrapers.
+A React SPA holds all state (CV + results) in `localStorage` and re-sends the CV in the body of every request. The FastAPI backend is a set of **pure functions of the request body** — no auth, no session, and no *user* data stored (the one exception is anonymous job-skill telemetry, below). It fans out to Claude for the language-heavy steps, a local deterministic matcher for scoring (no LLM), Tectonic for PDF, and three job scrapers.
 
 ```mermaid
 flowchart TB
@@ -50,7 +50,7 @@ flowchart TB
 
 ## Stateless request lifecycle
 
-The CV is uploaded once (PDF → markdown), returned to the client, and kept in `localStorage`. It is then re-sent in the body of every subsequent request. Nothing is persisted server-side.
+The CV is uploaded once (PDF → markdown), returned to the client, and kept in `localStorage`. It is then re-sent in the body of every subsequent request. No user data is persisted server-side (the only write to a database is anonymous job-skill telemetry — see [Local matching engine](#local-matching-engine)).
 
 ```mermaid
 sequenceDiagram
@@ -256,3 +256,20 @@ flowchart TB
 ## Local matching engine
 
 `src/matching/` is a curated AI/ML/data/cloud **skills gazetteer** (canonical terms → aliases) plus a deterministic phrase matcher. It resolves `torch → PyTorch`, `k8s → Kubernetes`, handles `C++`/`C#`/`Node.js`, and avoids false hits (`java` inside `javascript`, a bare `go`). It powers per-job skill overlap, the tailoring pipeline's honesty gate, search ranking, insights, and the guardrail's skill awareness — **free, ~1 ms, exact-repeatable**, with no LLM call per job.
+
+### One extractor for search and tailoring
+
+The gazetteer is the **single source of a JD's skills**. Search cards and the tailor's match/score/chips all run the same `extract_skills`, so a job can't show one skill count on the card and a different one in the tailor. The Haiku JD parser still reads the JD's *structure* (title, company, seniority, responsibilities), but `reconcile_jd_skills` replaces its free-form skill lists with the gazetteer — and hands back the skills Haiku named that the gazetteer *doesn't* know as **growth candidates**.
+
+```mermaid
+flowchart TB
+    JD["JD text"] --> HAIKU["Haiku parse (structure)<br/>+ free-form skills"]
+    HAIKU --> REC["reconcile_jd_skills"]
+    GAZ["gazetteer extract_skills"] --> REC
+    REC --> SKILLS["JD skills = gazetteer set<br/>(same as the search card)"]
+    REC --> CAND["growth candidates<br/>(Haiku named, gazetteer doesn't know)"]
+    CAND --> Q["Supabase growth_candidates<br/>(frequency-ranked queue)"]
+    Q --> CURATE["human curates → new gazetteer entries"]
+```
+
+Persistence (`src/growth.py`) is **fire-and-forget and fail-open** — a PostgREST RPC over HTTPS, scheduled off the request path so it never adds latency, and a no-op when Supabase isn't configured. The table stores only anonymous skill terms + an example job title (no user data). It's the first, deliberately tiny brick of a future job-market data platform: a review queue that turns "the gazetteer missed something" into a curation signal instead of a silent gap.

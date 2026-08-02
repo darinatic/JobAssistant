@@ -7,7 +7,7 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 1. **Tailor your resume** to a specific job — ATS-safe, keyword-exact, and honest (it never invents skills or history you don't have), rendered to a clean LaTeX PDF.
 2. **Search live jobs** across three platforms at once, showing exactly which of each posting's skills your CV already covers, plus a **job-intel panel** that flags scam/ghost postings.
 
-> **No login, no database.** Your CV lives in your browser's `localStorage`; every request is a pure function of its body, so nothing is stored server-side. Uploading and searching send your CV to the backend (skill matching runs locally — no LLM); tailoring sends it on to the AI (Claude), but a **PII guardrail strips your name, email, and phone first**, so the model tailors an anonymized copy and your details are restored locally. Processed, never persisted. Anyone can try it instantly.
+> **No account, and your résumé is never stored.** Your CV lives in your browser's `localStorage` and is re-sent per request. Uploading and searching send it to the backend (skill matching is local — no LLM); tailoring sends it to the AI (Claude), but a **PII guardrail strips your name, email, and phone first**, so the model only ever tailors an anonymized copy and your details are restored locally. The one thing we persist is **anonymous job-skill telemetry** (posting vocabulary, for taxonomy tuning) — never your CV or identity. Anyone can try it instantly.
 
 ---
 
@@ -38,7 +38,7 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 
 ### Architecture
 
-A React single-page app talks to a stateless FastAPI backend over JSON. The backend is a set of **pure functions of the request body** — it calls out to Claude for the language-heavy steps, to a local deterministic matcher for skill scoring (no LLM), to Tectonic for PDF rendering, and to three job scrapers. Nothing is persisted.
+A React single-page app talks to a stateless FastAPI backend over JSON. The backend is a set of **pure functions of the request body** — it calls out to Claude for the language-heavy steps, to a local deterministic matcher for skill scoring (no LLM), to Tectonic for PDF rendering, and to three job scrapers. No user data is persisted — the only thing written to a database is anonymous job-skill telemetry (never your CV or results).
 
 ```mermaid
 flowchart TB
@@ -64,7 +64,7 @@ flowchart TB
     SVC -- "response (ephemeral)" --> Client
 ```
 
-The CV is uploaded once (PDF → markdown), returned to the client, and kept in `localStorage`. It is then **re-sent in the body of every subsequent request**. Search results and tailored output are ephemeral. There is no auth, no session, and no database — which is what makes it a safe, instantly-shareable demo. (Full request lifecycle: [ARCHITECTURE.md → Stateless request lifecycle](ARCHITECTURE.md#stateless-request-lifecycle).)
+The CV is uploaded once (PDF → markdown), returned to the client, and kept in `localStorage`. It is then **re-sent in the body of every subsequent request**. Search results and tailored output are ephemeral. There is no auth and no session, and your CV and results are never stored — which is what makes it a safe, instantly-shareable demo. (The only persistence is a small `growth_candidates` table holding anonymous job-skill terms for taxonomy tuning — no user data. Full request lifecycle: [ARCHITECTURE.md → Stateless request lifecycle](ARCHITECTURE.md#stateless-request-lifecycle).)
 
 ### 1. Resume tailoring
 
@@ -113,6 +113,8 @@ Opening a job in the drawer runs a **deterministic-first**, stateless legitimacy
 
 `src/matching/` is a curated AI/ML/data/cloud **skills gazetteer** (canonical terms → aliases) plus a deterministic phrase matcher. It resolves `torch → PyTorch`, `k8s → Kubernetes`, handles `C++`/`C#`/`Node.js`, and avoids false hits (`java` inside `javascript`, a bare `go`). It powers per-job skill overlap, the tailoring pipeline's honesty gate, search-result ranking, and insights — **free, ~1 ms, exact-repeatable**, with no LLM call per job. (See [ARCHITECTURE.md → Local matching engine](ARCHITECTURE.md#local-matching-engine).)
 
+The gazetteer is the **single source of a JD's skills**: the tailor uses the *same* extractor as the search cards (via `reconcile_jd_skills`), so a job never shows one skill count on the card and a different one in the tailor. When the Haiku JD parser names a skill the gazetteer doesn't know, it's logged and appended to an anonymous **`growth_candidates`** table (Supabase, frequency-ranked) — a review queue for growing the taxonomy over time. Fire-and-forget and fail-open; a no-op when Supabase isn't configured.
+
 ---
 
 ## Tech stack
@@ -124,6 +126,7 @@ Opening a job in the drawer runs a **deterministic-first**, stateless legitimacy
 | **LLM** | Anthropic **Claude Haiku 4.5** (JD parse, NL query, JD clean-up) + **Sonnet 4.5** (tailor, cover letter) | Cheap model for parsing, quality model for writing |
 | **Matching** | Local gazetteer matcher (`src/matching/`) | Deterministic skill scoring, no LLM, ~1 ms |
 | **Privacy** | Deterministic PII guardrail (`src/guardrails/`) | Strips name/email/phone/URL from the CV before it reaches Claude, restored locally; no deps, ~1 ms |
+| **Telemetry** | Supabase Postgres (`growth_candidates` table, PostgREST RPC over `httpx`) | Anonymous job-skill terms for taxonomy tuning — no user data; fire-and-forget, fail-open |
 | **Resume in** | `markitdown` | Uploaded resume PDF → markdown |
 | **Resume out** | Markdown → LaTeX → **Tectonic** (`-X compile`) | ATS-safe single-column PDF; never stored |
 | **Scrapers** | `httpx` + `beautifulsoup4` (LinkedIn guest, MyCareersFuture JSON), **Patchright** (JobStreet stealth browser) | Live multi-platform search |
