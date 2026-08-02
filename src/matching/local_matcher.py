@@ -14,14 +14,11 @@ buckets that the tailoring phase must treat differently:
   / skill-gap path.
 """
 
-import logging
 from dataclasses import dataclass, field
 
 from src.agents.schemas import MatchRecommendation, ParsedJobDescription, SkillMatch
 from src.agents.skills_matcher import _skill_appears_in_cv
 from src.matching.gazetteer import canonicalize, extract_skills
-
-log = logging.getLogger(__name__)
 
 
 def _has_skill(skill: str, cv_canon: set[str], cv_lower: str) -> bool:
@@ -92,29 +89,27 @@ def rough_relevance(jd_text: str, master_cv: str) -> int:
     return round(100 * len(jd_skills & cv_skills) / len(jd_skills))
 
 
-def reconcile_jd_skills(parsed_jd: ParsedJobDescription, jd_text: str) -> None:
+def reconcile_jd_skills(parsed_jd: ParsedJobDescription, jd_text: str) -> list[str]:
     """Make the gazetteer the single source of the JD's skills, so search and
     tailoring agree on the same set (and the tailor stops surfacing Haiku's noisy
     soft-skill phrases).
 
     Haiku still parses the JD's *structure* (title, company, seniority,
     responsibilities); this replaces its free-form skill lists with the
-    deterministic gazetteer over the same text. Any skill Haiku named that the
-    gazetteer doesn't recognize is logged as a growth candidate — the seed for a
-    future curation pipeline that feeds new entries into the taxonomy. Mutates
-    ``parsed_jd`` in place.
+    deterministic gazetteer over the same text. Mutates ``parsed_jd`` in place and
+    **returns the growth candidates** — skills Haiku named that the gazetteer doesn't
+    recognize — for the caller to log and/or persist for later curation.
     """
     haiku_skills = list(dict.fromkeys(
         parsed_jd.required_skills + parsed_jd.preferred_skills + parsed_jd.tech_stack
     ))
     candidates = [s for s in haiku_skills if canonicalize(s) is None]
-    if candidates:
-        log.info("gazetteer_growth_candidates title=%r candidates=%s", parsed_jd.title, candidates)
 
     parsed_jd.required_skills = sorted(extract_skills(f"{parsed_jd.title}\n{jd_text}"))
     parsed_jd.preferred_skills = []
     parsed_jd.tech_stack = []
     parsed_jd.keywords_for_resume = []
+    return candidates
 
 
 @dataclass

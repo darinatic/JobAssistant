@@ -123,17 +123,18 @@ def test_reconcile_aligns_tailor_skills_with_search():
         preferred=["Machine Learning"],
         tech_stack=["PyTorch"],
     )
-    reconcile_jd_skills(jd, jd_text)
+    candidates = reconcile_jd_skills(jd, jd_text)
 
     assert jd.required_skills == sorted(extract_skills(f"{jd.title}\n{jd_text}"))
     assert {"Python", "PyTorch", "RAG", "Kubernetes"} <= set(jd.required_skills)
     assert "Stakeholder collaboration" not in jd.required_skills  # soft-skill noise dropped
     assert jd.preferred_skills == [] and jd.tech_stack == [] and jd.keywords_for_resume == []
+    # the dropped soft-skill phrases come back as growth candidates for curation
+    assert "Stakeholder collaboration" in candidates and "Innovation driving" in candidates
 
 
-def test_reconcile_logs_unknown_haiku_skills_as_growth_candidates(caplog):
+def test_reconcile_returns_unknown_haiku_skills_as_growth_candidates():
     jd = _jd(required=["Python", "Stakeholder collaboration"], tech_stack=["Widget wrangling"])
-    with caplog.at_level("INFO"):
-        reconcile_jd_skills(jd, "A Python role.")
-    assert "gazetteer_growth_candidates" in caplog.text
-    assert "Stakeholder collaboration" in caplog.text  # unknown to the gazetteer → candidate
+    candidates = reconcile_jd_skills(jd, "A Python role.")
+    assert "Python" not in candidates  # known to the gazetteer
+    assert set(candidates) == {"Stakeholder collaboration", "Widget wrangling"}

@@ -1,5 +1,6 @@
 """JD parsing agent."""
 
+import logging
 import re
 
 import httpx
@@ -10,13 +11,19 @@ from src.agents.schemas import ParsedJobDescription
 from src.prompts import get_prompt
 from src.utils.config import settings
 
+log = logging.getLogger(__name__)
 
-def _reconcile_skills(parsed: ParsedJobDescription, jd_text: str) -> None:
+
+def _reconcile_skills(parsed: ParsedJobDescription, jd_text: str) -> list[str]:
     """Replace Haiku's free-form skill lists with the deterministic gazetteer so
-    search and tailoring agree on the JD's skills. Lazy import avoids an import
-    cycle (matching → agents.schemas)."""
+    search and tailoring agree on the JD's skills; returns the growth candidates
+    (skills the gazetteer doesn't know). Lazy import avoids an import cycle
+    (matching → agents.schemas)."""
     from src.matching import reconcile_jd_skills
-    reconcile_jd_skills(parsed, jd_text)
+    candidates = reconcile_jd_skills(parsed, jd_text)
+    if candidates:
+        log.info("gazetteer_growth_candidates title=%r candidates=%s", parsed.title, candidates)
+    return candidates
 
 
 _HUMAN_PROMPT_TEMPLATE = """Parse the following job description and extract all relevant information.
@@ -59,7 +66,10 @@ class JDParserAgent:
         )
         result.source_url = source_url
         result.platform = platform or self._detect_platform(source_url)
-        _reconcile_skills(result, jd_text)
+        candidates = _reconcile_skills(result, jd_text)
+        if candidates:
+            from src.growth import schedule
+            schedule(candidates, result.title)  # fire-and-forget, fail-open, no-op if unconfigured
         return result
 
     def parse_sync(

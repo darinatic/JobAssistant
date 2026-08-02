@@ -85,6 +85,19 @@ class Settings(BaseSettings):
     # src/guardrails. Set false to disable locally for debugging.
     pii_redaction_enabled: bool = True
 
+    # Supabase REST creds. When both are set, the JD parser persists gazetteer-growth
+    # candidates (skills Haiku named that the gazetteer doesn't know) to a
+    # `growth_candidates` table for later curation, via a PostgREST RPC — see
+    # src/growth.py. Unset = feature off (writes are a no-op). Fail-open; never blocks
+    # tailoring. (SUPABASE_DB_POOL_URL / SUPABASE_ANON_KEY may also live in .env for
+    # direct-SQL / future data-platform work; not used by the app runtime.)
+    supabase_url: str | None = None
+    supabase_service_role_key: SecretStr | None = None
+
+    @property
+    def growth_persist_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_service_role_key)
+
     headless_mode: bool = False
     browser_slowmo_ms: int = 100
 
