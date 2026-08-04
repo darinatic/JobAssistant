@@ -1,8 +1,10 @@
-import { Component, type ReactNode, useEffect, useRef, useState } from 'react'
+import { Component, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { api, ApiError, type GuardrailReport, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
+import { StageBuilder } from '@/components/StageBuilder'
+import { type ResumeDoc, blankDoc, deserialize, hasContent, serialize } from '@/lib/resume-doc'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
 import { patchSkillsLine, skillInResume } from '@/lib/skills'
@@ -24,8 +26,27 @@ const jobKey = (j: { platform: string; external_id: string }) => `${j.platform}:
 // rather than floating up on a misleading title-only relevance.
 const jobRank = (j: Job) => (j.has_description ? (j.fit ?? j.relevance ?? 0) : -1)
 
-const CV_KEY = 'overlap.cv'
+const CV_KEY = 'overlap.cv'    // legacy: migrated once into DOC_KEY, then retired
+const DOC_KEY = 'overlap.doc'
 const SEARCH_KEY = 'overlap.search'
+
+// Load the structured resume: prefer the new doc; migrate a legacy markdown cv once.
+function loadDoc(): ResumeDoc {
+  try {
+    const raw = localStorage.getItem(DOC_KEY)
+    if (raw) return JSON.parse(raw) as ResumeDoc
+  } catch { /* fall through */ }
+  try {
+    const legacy = localStorage.getItem(CV_KEY)
+    if (legacy) {
+      const doc = deserialize(legacy)
+      localStorage.setItem(DOC_KEY, JSON.stringify(doc))
+      localStorage.removeItem(CV_KEY)
+      return doc
+    }
+  } catch { /* fall through */ }
+  return blankDoc()
+}
 
 type ActiveJob = { job?: Job; jd: string }
 type View = 'upload' | 'search' | 'job'
@@ -196,13 +217,20 @@ function SalaryLevel({ job, align = 'right' }: { job: Job; align?: 'right' | 'le
 }
 
 function Home() {
-  const [cv, setCv] = useState<string>(() => localStorage.getItem(CV_KEY) || '')
+  const [doc, setDoc] = useState<ResumeDoc>(() => loadDoc())
   const [uploading, setUploading] = useState(false)
-  const [view, setView] = useState<View>(() => (localStorage.getItem(CV_KEY) ? 'search' : 'upload'))
+  const hasCv = hasContent(doc)
+  const [view, setView] = useState<View>(() => (hasContent(loadDoc()) ? 'search' : 'upload'))
 
-  function updateCv(md: string) {
-    setCv(md)
-    try { localStorage.setItem(CV_KEY, md) } catch { /* quota */ }
+  // Two serializations: search/matching see the FULL master CV (so hiding a
+  // section from the printed resume doesn't stop those skills matching jobs);
+  // tailoring/rendering see only the enabled subset (what actually prints).
+  const cvFull = useMemo(() => (hasCv ? serialize(doc, { include: 'all' }) : ''), [doc, hasCv])
+  const cvResume = useMemo(() => (hasCv ? serialize(doc, { include: 'enabled' }) : ''), [doc, hasCv])
+
+  function updateDoc(d: ResumeDoc) {
+    setDoc(d)
+    try { localStorage.setItem(DOC_KEY, JSON.stringify(d)) } catch { /* quota */ }
   }
 
   const saved = useRef<SavedSearch>(loadSearch()).current
@@ -278,7 +306,7 @@ function Home() {
     const same = (j: Job) => j.platform === u.platform && j.external_id === u.external_id
     setJobs((prev) => {
       const next = prev.map((j) => (same(j) ? { ...j, ...u } : j))
-      return cv ? [...next].sort((a, b) => jobRank(b) - jobRank(a)) : next
+      return hasCv ? [...next].sort((a, b) => jobRank(b) - jobRank(a)) : next
     })
     setActiveJob((prev) =>
       prev?.job && same(prev.job) ? { job: { ...prev.job, ...u }, jd: u.description ?? prev.jd } : prev,
@@ -293,7 +321,7 @@ function Home() {
     enrichAbort.current = ac
     try {
       await api.enrichStream(
-        { jobs: need, resume_markdown: cv || undefined },
+        { jobs: need, resume_markdown: cvFull || undefined },
         {
           onUpdate: (u) => {
             patchJob(u)
@@ -315,13 +343,14 @@ function Home() {
     try { localStorage.removeItem(SEARCH_KEY) } catch { /* ignore */ }
   }
 
-  async function onUpload(file: File) {
+  async function onUpload(file: File): Promise<boolean> {
     setUploading(true)
     try {
-      const { markdown, chars } = await api.parseResume(file)
-      updateCv(markdown)
-      toast.success(`Resume loaded (${chars.toLocaleString()} chars), review the markdown for parsing glitches`)
-    } catch (e) { toast.error(err(e)) } finally { setUploading(false) }
+      const { doc: parsed } = await api.parseResume(file)
+      updateDoc(parsed)
+      toast.success('Resume parsed into sections, review each one for parsing glitches')
+      return true
+    } catch (e) { toast.error(err(e)); return false } finally { setUploading(false) }
   }
 
   function toggleFilter(key: 'experienceLevels' | 'remoteOptions' | 'platforms', value: string) {
@@ -334,7 +363,7 @@ function Home() {
   function setMax(value: number) { setFilters((f) => ({ ...f, maxJobs: value })) }
 
   async function onSearch() {
-    if (!cv) return toast.error('Upload your resume first, then search.')
+    if (!hasCv) return toast.error('Upload your resume first, then search.')
     if (query.trim().length < 2) return
     searchAbort.current?.abort()
     enrichAbort.current?.abort()
@@ -347,7 +376,7 @@ function Home() {
       await api.searchStream(
         {
           query,
-          resume_markdown: cv || undefined,
+          resume_markdown: cvFull || undefined,
           filters: toRequestFilters(filters, query, interpreted?.location ?? 'Singapore'),
           strong_fits_only: strongFitsOnly,
         },
@@ -361,7 +390,7 @@ function Home() {
             if (!j.has_description) setPending((prev) => new Set(prev).add(k))
             setJobs((prev) => {
               const next = [...prev, j]
-              return cv ? next.sort((a, b) => jobRank(b) - jobRank(a)) : next
+              return hasCv ? next.sort((a, b) => jobRank(b) - jobRank(a)) : next
             })
           },
           onDone: (fl) => setFloor(!!fl),
@@ -383,7 +412,7 @@ function Home() {
     const js = jobsArg ?? jobs
     if (!js.length) return
     setAnalyzing(true)
-    try { setInsights(await api.insights({ jobs: js, resume_markdown: cv || undefined })) }
+    try { setInsights(await api.insights({ jobs: js, resume_markdown: cvFull || undefined })) }
     catch { /* best-effort */ } finally { setAnalyzing(false) }
   }
 
@@ -396,7 +425,7 @@ function Home() {
       try {
         const d = await api.jobDescription({
           platform: job.platform, external_id: job.external_id, url: job.url,
-          title: job.title, resume_markdown: cv || undefined,
+          title: job.title, resume_markdown: cvFull || undefined,
         })
         if (d.has_description) {
           patchJob({
@@ -412,7 +441,7 @@ function Home() {
   }
 
   function openPasteJd() {
-    if (!cv) return toast.error('Upload your resume first.')
+    if (!hasCv) return toast.error('Upload your resume first.')
     if (jd.trim().length < 20) return toast.error('Paste a longer job description.')
     resetResult()
     setActiveJob({ jd })
@@ -426,11 +455,11 @@ function Home() {
   }
 
   async function runTailor(jdText: string) {
-    if (!cv) return toast.error('Upload your resume first.')
+    if (!hasCv) return toast.error('Upload your resume first.')
     if (jdText.trim().length < 20) return toast.error('This posting has no description to tailor against.')
     setTailoring(true)
     try {
-      const res = await api.tailor({ jd_text: jdText, resume_markdown: cv, style })
+      const res = await api.tailor({ jd_text: jdText, resume_markdown: cvResume, style })
       setResult(res)
       setEditedResume(applySkillAdditions(res.tailored_resume_markdown ?? '', res.match))
       setCoverLetter(null)
@@ -476,7 +505,7 @@ function Home() {
   const allFits = jobs.map((job) => job.fit).filter((f): f is number => f != null)
 
   const goStage = (v: View) => {
-    if (v === 'search' && !cv) return toast.error('Upload your resume first.')
+    if (v === 'search' && !hasCv) return toast.error('Upload your resume first.')
     if (v === 'job' && !activeJob) return
     setView(v)
   }
@@ -484,10 +513,10 @@ function Home() {
   return (
     <div className="ov" style={{ minHeight: '100%' }}>
       <div className="ov-shell" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <StageBar view={view} cv={!!cv} hasJob={!!activeJob} onGo={goStage} />
+        <StageBar view={view} cv={hasCv} hasJob={!!activeJob} onGo={goStage} />
 
         {view === 'upload' && (
-          <StageResume cv={cv} uploading={uploading} onUpload={onUpload} updateCv={updateCv} onContinue={() => goStage('search')} />
+          <StageBuilder doc={doc} setDoc={updateDoc} uploading={uploading} onUpload={onUpload} onTailor={() => goStage('search')} />
         )}
 
         {view === 'search' && (
@@ -625,56 +654,6 @@ function StageBar({ view, cv, hasJob, onGo }: { view: View; cv: boolean; hasJob:
         <span className="ov-micro ov-hide-sm" style={{ fontSize: 9 }}>{cv ? `cv loaded · local` : 'no cv · local'}</span>
       </div>
     </header>
-  )
-}
-
-// ---- stage 01 resume -------------------------------------------------------
-
-function StageResume({ cv, uploading, onUpload, updateCv, onContinue }: {
-  cv: string; uploading: boolean; onUpload: (f: File) => void; updateCv: (md: string) => void; onContinue: () => void
-}) {
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => e.target.files?.[0] && onUpload(e.target.files[0])
-  if (!cv) {
-    return (
-      <div className="ov-pad" style={{ flex: 1 }}>
-        <div className="ov-eyebrow" style={{ marginBottom: 16 }}>step 01 / 03</div>
-        <h1 className="ov-h1" style={{ maxWidth: 640 }}>Three boards, read at once.</h1>
-        <p className="ov-lead" style={{ marginTop: 20 }}>
-          Scored against your own words. No account, and your CV is never stored.
-        </p>
-        <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 11, border: '2px dashed var(--ink)', padding: '34px 18px', marginTop: 28, cursor: 'pointer', maxWidth: 520 }}>
-          <span className="ov-mono" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 26, color: 'var(--ink)' }}>[ + ]</span>
-          <span className="ov-micro" style={{ fontWeight: 700, fontSize: 11, letterSpacing: '0.14em' }}>{uploading ? 'parsing…' : 'upload resume pdf'}</span>
-          <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onFile} />
-        </label>
-        <div style={{ display: 'flex', border: '2px solid var(--ink)', marginTop: 32, maxWidth: 520 }}>
-          {[['3', 'boards'], ['~1ms', 'match'], ['0', 'stored']].map(([n, l], i) => (
-            <div key={l} style={{ flex: 1, padding: '14px 16px', borderRight: i < 2 ? '1px solid var(--rule)' : undefined }}>
-              <div className="ov-num" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 22, color: 'var(--ink)' }}>{n}</div>
-              <div className="ov-micro" style={{ fontSize: 9, marginTop: 4 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="ov-pad" style={{ flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-        <div className="ov-eyebrow">step 01 / 03 · markdown source</div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <label className="ov-btn" style={{ cursor: 'pointer' }}>
-            {uploading ? 'parsing…' : 'replace pdf'}
-            <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onFile} />
-          </label>
-          <button className="ov-btn ov-btn-ink" onClick={onContinue}>continue to search →</button>
-        </div>
-      </div>
-      <ResumeWorkspace value={cv} onChange={updateCv} showPageBadge label="your resume" />
-      <p className="ov-micro" style={{ fontSize: 9, marginTop: 12, letterSpacing: '0.08em' }}>
-        fix any pdf-parsing glitches here. this exact cv is used for matching and tailoring. saved to your browser as you type.
-      </p>
-    </div>
   )
 }
 

@@ -19,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src import search as job_search
 from src import services
+from src.agents.resume_structurer import ResumeDocModel, ResumeStructurerAgent
 from src.agents.schemas import SkillMatch
 from src.guardrails import GuardrailReport
 from src.logging_setup import configure_logging
@@ -83,7 +84,7 @@ class HealthResponse(BaseModel):
 
 
 class ResumeParseResponse(BaseModel):
-    markdown: str
+    doc: ResumeDocModel
     chars: int
 
 
@@ -283,19 +284,22 @@ async def health() -> HealthResponse:
 
 @app.post("/resume/parse", response_model=ResumeParseResponse)
 async def resume_parse(file: UploadFile = File(...)) -> ResumeParseResponse:
-    """PDF resume → markdown (via MarkItDown). Returned to the client; never stored."""
+    """PDF resume → structured section model (MarkItDown text → one Haiku structuring
+    pass). Returned to the client; never stored. OCR for scans is a later slice."""
     from markitdown import MarkItDown
 
     pdf_bytes = await file.read()
     try:
         result = MarkItDown().convert_stream(BytesIO(pdf_bytes), file_extension=".pdf")
-        markdown = result.text_content
+        text = result.text_content
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Failed to parse PDF: {e}") from e
 
-    if len(markdown.strip()) < 100:
+    if len(text.strip()) < 100:
         raise HTTPException(status_code=422, detail="Parsed resume is too short — is this a text PDF (not a scan)?")
-    return ResumeParseResponse(markdown=markdown, chars=len(markdown))
+
+    doc = await ResumeStructurerAgent().structure(text)
+    return ResumeParseResponse(doc=doc, chars=len(text))
 
 
 @app.post("/search", response_model=SearchResponse)

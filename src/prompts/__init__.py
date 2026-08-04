@@ -17,6 +17,7 @@ Override the active version at runtime without touching code::
 from src.prompts import (  # noqa: F401
     cover_letter,
     jd_parser,
+    resume_structurer,
     resume_tailor,
 )
 from src.prompts.registry import (

@@ -1,6 +1,8 @@
 // Default to a RELATIVE base URL: in production FastAPI serves this SPA on the same
 // origin, so `/tailor` etc. hit the same host. Local dev sets VITE_API_URL (see
 // frontend/.env.development) to point at the separate backend on :8000.
+import { type ResumeDoc, normalizeDoc } from './resume-doc'
+
 const API_URL = import.meta.env.VITE_API_URL || ''
 
 export class ApiError extends Error {
@@ -136,10 +138,13 @@ export interface TailorResult {
 
 // --- endpoints --------------------------------------------------------------
 export const api = {
-  parseResume: async (file: File): Promise<{ markdown: string; chars: number }> => {
+  parseResume: async (file: File): Promise<{ doc: ResumeDoc; chars: number }> => {
     const fd = new FormData()
     fd.append('file', file)
-    return handle(await fetch(`${API_URL}/resume/parse`, { method: 'POST', body: fd }))
+    const raw = await handle<{ doc: unknown; chars: number }>(
+      await fetch(`${API_URL}/resume/parse`, { method: 'POST', body: fd }),
+    )
+    return { doc: normalizeDoc(raw.doc), chars: raw.chars }
   },
 
   // Progressive search — NDJSON stream. Calls handlers as results arrive.
