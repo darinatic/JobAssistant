@@ -6,6 +6,7 @@ import {
   hasContent,
   normalizeDoc,
   serialize,
+  unreviewedCount,
 } from './resume-doc'
 
 const DOC: ResumeDoc = {
@@ -209,6 +210,36 @@ describe('normalizeDoc — the id-less parse response', () => {
   it('normalizes chips to {text, on} and drops empties', () => {
     const doc = normalizeDoc({ sections: [{ id: 'skills', label: 'Skills', kind: 'chips', chips: [{ text: 'Go' }, { text: '' }] }] })
     expect(doc.sections[0].chips).toEqual([{ text: 'Go', on: true }])
+  })
+})
+
+describe('normalizeDoc — confidence + review flags (slice 2)', () => {
+  it('carries conf/issue and starts unreviewed', () => {
+    const doc = normalizeDoc({ sections: [{ id: 'summary', label: 'Summary', kind: 'text', text: 'x', conf: 0.7, issue: 'Mapped from Profile.' }] })
+    const s = doc.sections[0]
+    expect(s.conf).toBe(0.7)
+    expect(s.issue).toBe('Mapped from Profile.')
+    expect(s.reviewed).toBe(false)
+  })
+
+  it('defaults conf to 1 and issue to null when absent', () => {
+    const doc = normalizeDoc({ sections: [{ id: 'skills', label: 'Skills', kind: 'chips', chips: [{ text: 'Go' }] }] })
+    expect(doc.sections[0].conf).toBe(1)
+    expect(doc.sections[0].issue).toBeNull()
+  })
+})
+
+describe('unreviewedCount', () => {
+  it('counts sections with an unresolved issue only', () => {
+    const doc: ResumeDoc = {
+      version: 1,
+      sections: [
+        { id: 'a', label: 'A', kind: 'text', on: true, text: '', issue: 'look', reviewed: false },
+        { id: 'b', label: 'B', kind: 'text', on: true, text: '', issue: 'seen', reviewed: true },
+        { id: 'c', label: 'C', kind: 'text', on: true, text: '', issue: null },
+      ],
+    }
+    expect(unreviewedCount(doc)).toBe(1)
   })
 })
 

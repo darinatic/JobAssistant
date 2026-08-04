@@ -13,10 +13,11 @@ from src.agents.resume_structurer import (
 
 def _fake_doc() -> ResumeDocModel:
     return ResumeDocModel(sections=[
-        ResumeSection(id="contact", label="Contact", kind="fields",
+        ResumeSection(id="contact", label="Contact", kind="fields", conf=0.99,
                       fields=[ResumeField(label="Full name", value="Jane Doe"),
                               ResumeField(label="Email", value="jane@x.com")]),
-        ResumeSection(id="experience", label="Experience", kind="blocks",
+        ResumeSection(id="experience", label="Experience", kind="blocks", conf=0.7,
+                      issue="One role reads 'Present'. Confirm it is still current.",
                       blocks=[ResumeBlock(title="Engineer", org="Acme", dates="2023",
                                           bullets=[ResumeBullet(text="Built things")])]),
     ])
@@ -42,6 +43,10 @@ def test_resume_parse_returns_structured_doc(client):
     assert [s["id"] for s in body["doc"]["sections"]] == ["contact", "experience"]
     assert body["doc"]["sections"][0]["fields"][0]["value"] == "Jane Doe"
     assert body["doc"]["sections"][1]["blocks"][0]["bullets"][0]["text"] == "Built things"
+    # slice 2: per-section confidence + review issue flow through the endpoint
+    assert body["doc"]["sections"][1]["conf"] == 0.7
+    assert "confirm" in body["doc"]["sections"][1]["issue"].lower()
+    assert body["doc"]["sections"][0]["issue"] is None
 
 
 def test_resume_parse_rejects_a_scan(client):

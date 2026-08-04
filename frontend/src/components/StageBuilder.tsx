@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { estimatePageFit } from '@/lib/page-fit'
@@ -9,10 +9,11 @@ import {
   blankDoc,
   hasContent,
   serialize,
+  unreviewedCount,
 } from '@/lib/resume-doc'
 import {
   addBlock, addBullet, addChip, moveBlock, moveSection, removeBlock, removeBullet,
-  removeChip, setBlockField, setBullet, setField, setLabel, setText,
+  removeChip, resolveIssue, setBlockField, setBullet, setField, setLabel, setText,
   toggleBlockOn, toggleBulletOn, toggleChip, toggleSectionOn,
 } from '@/lib/resume-doc-ops'
 
@@ -35,11 +36,16 @@ function NavRail({ doc, activeId, onPick, set }: {
   const [drag, setDrag] = useState<number | null>(null)
   const [over, setOver] = useState<number | null>(null)
   const shown = doc.sections.filter((s) => s.on || s.id === 'contact').length
+  const toReview = unreviewedCount(doc)
   return (
     <div style={{ borderRight: '2px solid var(--ink)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '11px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', justifyContent: 'space-between' }}>
         <span style={micro}>sections · drag to reorder</span>
         <span style={micro}>{shown}/{doc.sections.length} on</span>
+      </div>
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 8, height: 8, flex: '0 0 8px', background: toReview ? 'var(--honesty)' : 'var(--have)' }} />
+        <span style={{ ...micro, fontSize: 9 }}>{toReview ? `${toReview} section${toReview > 1 ? 's' : ''} to review` : 'all sections confirmed'}</span>
       </div>
       {doc.sections.map((s, i) => {
         const active = s.id === activeId
@@ -73,6 +79,7 @@ function NavRail({ doc, activeId, onPick, set }: {
               <span style={{ ...mono, fontSize: 10, color: active ? 'var(--paper)' : 'var(--dim)' }}>{String(i + 1).padStart(2, '0')}</span>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{s.label}</span>
               <span style={{ ...mono, fontSize: 11, fontWeight: 700, color: active ? 'var(--paper)' : 'var(--dim)' }}>{sectionCount(s)}</span>
+              <span title={s.issue && !s.reviewed ? 'needs a look' : undefined} style={{ width: 7, height: 7, flex: '0 0 7px', background: s.issue && !s.reviewed ? 'var(--honesty)' : 'transparent' }} />
             </button>
           </div>
         )
@@ -282,6 +289,47 @@ function PreviewPane({ doc, onTailor }: { doc: ResumeDoc; onTailor: () => void }
   )
 }
 
+// ---- post-parse reveal -----------------------------------------------------
+// One structuring call already returned; we step through the REAL sections and
+// their REAL confidence/flags so the moment is honest (only the reveal is paced).
+
+function ParseReveal({ doc, onDone }: { doc: ResumeDoc; onDone: () => void }) {
+  const [n, setN] = useState(0)
+  const total = doc.sections.length
+  useEffect(() => {
+    if (n >= total) { const t = setTimeout(onDone, 550); return () => clearTimeout(t) }
+    const t = setTimeout(() => setN((x) => x + 1), 320)
+    return () => clearTimeout(t)
+  }, [n, total, onDone])
+  const pct = total ? Math.round((Math.min(n, total) / total) * 100) : 100
+  return (
+    <div className="ov-pad" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 480 }}>
+      <p style={micro}>builder · mapping sections</p>
+      <h2 className="ov-h1" style={{ marginTop: 12 }}>Splitting your resume into sections<span style={{ animation: 'ov-blink 1s steps(1,end) infinite' }}>_</span></h2>
+      <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flex: 1, height: 14, border: '2px solid var(--ink)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--ink)', transition: 'width .3s' }} />
+        </div>
+        <span style={{ ...mono, fontSize: 20, fontWeight: 700, minWidth: 56, textAlign: 'right' }}>{pct}%</span>
+      </div>
+      <div style={{ marginTop: 24, border: '2px solid var(--ink)' }}>
+        {doc.sections.map((s, i) => {
+          const done = i < n, now = i === n, flag = !!s.issue
+          return (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', borderBottom: i < total - 1 ? '1px solid var(--rule)' : undefined, opacity: done || now ? 1 : 0.35 }}>
+              <span style={{ width: 8, height: 8, flex: '0 0 8px', background: done ? (flag ? 'var(--honesty)' : 'var(--have)') : now ? 'var(--honesty)' : 'var(--hair)', animation: now ? 'ov-blink .5s steps(1,end) infinite' : undefined }} />
+              <span style={{ ...micro, width: 24 }}>{String(i + 1).padStart(2, '0')}</span>
+              <span style={{ ...mono, fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', width: 150 }}>{s.label}</span>
+              <span style={{ flex: 1, ...mono, fontSize: 12, color: 'var(--dim)' }}>{done ? (flag ? 'needs a look' : 'mapped') : now ? 'reading…' : ''}</span>
+              <span style={{ ...mono, fontSize: 12, fontWeight: 700, color: 'var(--dim)' }}>{done ? `${Math.round((s.conf ?? 1) * 100)}%` : ''}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ---- stage shell -----------------------------------------------------------
 
 export function StageBuilder({ doc, setDoc, uploading, onUpload, onTailor }: {
@@ -291,7 +339,7 @@ export function StageBuilder({ doc, setDoc, uploading, onUpload, onTailor }: {
   onUpload: (f: File) => Promise<boolean>
   onTailor: () => void
 }) {
-  const [phase, setPhase] = useState<'import' | 'parsing' | 'builder'>(() => (hasContent(doc) ? 'builder' : 'import'))
+  const [phase, setPhase] = useState<'import' | 'parsing' | 'reveal' | 'builder'>(() => (hasContent(doc) ? 'builder' : 'import'))
   const [activeId, setActiveId] = useState<string>(() => doc.sections[0]?.id ?? 'contact')
   const fileRef = useRef<HTMLInputElement>(null)
   dref.current = doc
@@ -301,7 +349,11 @@ export function StageBuilder({ doc, setDoc, uploading, onUpload, onTailor }: {
   async function importFile(file: File) {
     setPhase('parsing')
     const ok = await onUpload(file)
-    if (ok) { setActiveId('contact'); setPhase('builder') } else { setPhase('import') }
+    setPhase(ok ? 'reveal' : 'import')
+  }
+
+  if (phase === 'reveal') {
+    return <ParseReveal doc={doc} onDone={() => { setActiveId(doc.sections[0]?.id ?? 'contact'); setPhase('builder') }} />
   }
 
   if (phase === 'import') {
@@ -350,8 +402,19 @@ export function StageBuilder({ doc, setDoc, uploading, onUpload, onTailor }: {
             <input value={active?.label ?? ''} onChange={(e) => active && set(setLabel(dref.current, active.id, e.target.value))} disabled={active?.id === 'contact'}
               style={{ border: 0, background: 'transparent', fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'inherit', fontFamily: 'inherit', width: 260 }} />
           </div>
-          <button onClick={() => setPhase('import')} className="ov-btn">re-import</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={micro}>confidence {Math.round((active?.conf ?? 1) * 100)}%</span>
+            <button onClick={() => setPhase('import')} className="ov-btn">re-import</button>
+          </div>
         </div>
+        {active && active.issue && !active.reviewed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 24px', background: 'color-mix(in oklch, var(--honesty) 9%, transparent)', borderBottom: '2px solid var(--ink)' }}>
+            <span style={{ width: 10, height: 10, flex: '0 0 10px', background: 'var(--honesty)' }} />
+            <span style={{ ...micro, color: 'var(--honesty)' }}>review</span>
+            <span style={{ flex: 1, fontSize: 14, lineHeight: 1.5 }}>{active.issue}</span>
+            <button onClick={() => set(resolveIssue(dref.current, active.id))} className="ov-btn ov-btn-ink" style={{ whiteSpace: 'nowrap' }}>looks right</button>
+          </div>
+        )}
         {active && !active.on && active.id !== 'contact' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px', background: 'var(--surface)', borderBottom: '2px solid var(--ink)' }}>
             <span style={{ ...micro }}>hidden</span>

@@ -44,6 +44,8 @@ class ResumeSection(BaseModel):
     label: str
     kind: Literal["fields", "text", "chips", "blocks"]
     on: bool = True
+    conf: float = Field(default=1.0, ge=0.0, le=1.0, description="0..1 confidence that this section was parsed/mapped correctly")
+    issue: str | None = Field(default=None, description="One short sentence for the user to confirm when the mapping was ambiguous; null when clean")
     fields: list[ResumeField] | None = None
     text: str | None = None
     chips: list[ResumeChip] | None = None

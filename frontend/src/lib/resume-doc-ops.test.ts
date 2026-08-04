@@ -5,6 +5,7 @@ import {
   addChip,
   moveSection,
   removeBlock,
+  resolveIssue,
   toggleBulletOn,
   toggleChip,
   setField,
@@ -81,6 +82,18 @@ describe('setField', () => {
     const out = setField(doc, 'contact', 0, 'Jane Doe')
     expect(out.sections[0].fields![0].value).toBe('Jane Doe')
     expect(doc.sections[0].fields![0].value).toBe('')
+  })
+})
+
+describe('resolveIssue', () => {
+  it('marks a section reviewed so its flag clears', () => {
+    const doc: ResumeDoc = {
+      version: 1,
+      sections: [{ id: 'summary', label: 'Summary', kind: 'text', on: true, text: '', issue: 'confirm', reviewed: false }],
+    }
+    const out = resolveIssue(doc, 'summary')
+    expect(out.sections[0].reviewed).toBe(true)
+    expect(doc.sections[0].reviewed).toBe(false) // immutable
   })
 })
 

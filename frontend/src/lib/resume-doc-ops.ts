@@ -33,6 +33,13 @@ export function toggleSectionOn(doc: ResumeDoc, sectionId: string): ResumeDoc {
   })
 }
 
+// Confirm a parser-flagged section ("Looks right") — clears its nav flag.
+export function resolveIssue(doc: ResumeDoc, sectionId: string): ResumeDoc {
+  return edit(doc, sectionId, (s) => {
+    s.reviewed = true
+  })
+}
+
 export function setLabel(doc: ResumeDoc, sectionId: string, label: string): ResumeDoc {
   return edit(doc, sectionId, (s) => {
     s.label = label

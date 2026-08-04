@@ -30,6 +30,9 @@ export type Section = {
   label: string
   kind: SectionKind
   on: boolean
+  conf?: number          // 0..1 parse confidence (slice 2)
+  issue?: string | null  // review prompt from the parser, null/absent when clean
+  reviewed?: boolean      // user confirmed the issue ("Looks right")
   fields?: FieldKV[]
   text?: string
   chips?: Chip[]
@@ -232,6 +235,9 @@ export function normalizeDoc(raw: unknown): ResumeDoc {
       label: String(s.label ?? ''),
       kind,
       on: s.on !== false,
+      conf: typeof s.conf === 'number' ? s.conf : 1,
+      issue: s.issue ? String(s.issue) : null,
+      reviewed: false,
     }
     if (kind === 'fields') {
       sec.fields = (s.fields ?? []).map((f: any) => ({
@@ -262,6 +268,11 @@ export function normalizeDoc(raw: unknown): ResumeDoc {
     return sec
   })
   return { version: 1, sections }
+}
+
+// Sections the parser flagged that the user hasn't confirmed yet (slice 2).
+export function unreviewedCount(doc: ResumeDoc): number {
+  return doc.sections.filter((s) => s.issue && !s.reviewed).length
 }
 
 export function hasContent(doc: ResumeDoc): boolean {
