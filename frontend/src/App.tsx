@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { api, ApiError, type GuardrailReport, type Insights, type Job, type RedFlag, type TailorResult } from '@/lib/api'
 import { ResumeWorkspace } from '@/components/ResumeWorkspace'
 import { StageBuilder } from '@/components/StageBuilder'
-import { type ResumeDoc, blankDoc, deserialize, hasContent, serialize } from '@/lib/resume-doc'
+import { type ResumeDoc, blankDoc, deserialize, hasContent, serialize, upgradeDoc } from '@/lib/resume-doc'
 import { estimatePageTarget } from '@/lib/page-fit'
 import { fitLabel } from '@/lib/fit'
 import { patchSkillsLine, skillInResume } from '@/lib/skills'
@@ -34,7 +34,7 @@ const SEARCH_KEY = 'overlap.search'
 function loadDoc(): ResumeDoc {
   try {
     const raw = localStorage.getItem(DOC_KEY)
-    if (raw) return JSON.parse(raw) as ResumeDoc
+    if (raw) return upgradeDoc(JSON.parse(raw) as ResumeDoc)
   } catch { /* fall through */ }
   try {
     const legacy = localStorage.getItem(CV_KEY)

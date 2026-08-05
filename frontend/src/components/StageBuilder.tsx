@@ -7,14 +7,16 @@ import {
   type ResumeDoc,
   type Section,
   blankDoc,
+  fromMonthInput,
   hasContent,
   serialize,
+  toMonthInput,
   unreviewedCount,
 } from '@/lib/resume-doc'
 import {
   addBlock, addBullet, addChip, moveBlock, moveSection, removeBlock, removeBullet,
   removeChip, resolveIssue, setBlockField, setBullet, setField, setLabel, setText,
-  toggleBlockOn, toggleBulletOn, toggleChip, toggleSectionOn,
+  toggleBlockCurrent, toggleBlockOn, toggleBulletOn, toggleChip, toggleSectionOn,
 } from '@/lib/resume-doc-ops'
 
 const mono = { fontFamily: 'var(--font-mono)' } as const
@@ -116,9 +118,23 @@ function BlockCard({ sec, block, index, set, drag, setDrag, over, setOver }: {
       <div style={{ opacity: on ? 1 : 0.45 }}>
         <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Field label={sec.id === 'education' ? 'Degree' : isCert ? 'Certification' : 'Title'} value={block.title} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'title', v))} big />
-          <Field label={isCert ? 'Issuer' : 'Company · location'} value={block.org} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'org', v))} />
-          <Field label="Dates" value={block.dates} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'dates', v))} mono />
+          <Field label={orgLabel(sec)} value={block.org} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'org', v))} />
           {isCert && <Field label="Credential ID" value={block.credential ?? ''} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'credential', v))} mono />}
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 18, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <MonthField label="Start" value={block.startDate} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'startDate', v))} />
+            {block.current ? (
+              <div>
+                <p style={{ ...micro, margin: '0 0 5px' }}>End</p>
+                <span style={{ ...mono, fontSize: 13, fontWeight: 700, borderBottom: '2px solid var(--ink)', padding: '6px 0', display: 'inline-block', width: 150 }}>Present</span>
+              </div>
+            ) : (
+              <MonthField label="End" value={block.endDate} onChange={(v) => set(setBlockField(dref.current, sec.id, block.id, 'endDate', v))} />
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', paddingBottom: 6 }}>
+              <input type="checkbox" checked={block.current} onChange={() => set(toggleBlockCurrent(dref.current, sec.id, block.id))} style={{ width: 15, height: 15, accentColor: 'var(--ink)', cursor: 'pointer' }} />
+              <span style={{ ...micro, fontSize: 10 }}>currently here</span>
+            </label>
+          </div>
         </div>
         {!isCert && (
           <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -142,6 +158,34 @@ function BlockCard({ sec, block, index, set, drag, setDrag, over, setOver }: {
 // latest state (the cards are mapped from a snapshot; without this, two edits in
 // one render batch would clobber each other).
 const dref = { current: { version: 1, sections: [] } as ResumeDoc }
+
+const ORG_LABELS: Record<string, string> = {
+  education: 'Institution', certifications: 'Issuer', awards: 'Awarding body', projects: 'Context',
+}
+const orgLabel = (sec: Section) => ORG_LABELS[sec.id] ?? 'Company'
+
+// A month input (native <input type="month">) that stores MM/YYYY; falls back to a
+// plain MM/YYYY text field for values that aren't a clean month (year-only, etc.).
+function MonthField({ label, value, onChange, disabled }: {
+  label: string; value: string; onChange: (v: string) => void; disabled?: boolean
+}) {
+  const monthVal = toMonthInput(value)
+  const native = !value || !!monthVal
+  const st: React.CSSProperties = {
+    border: 0, borderBottom: `2px solid ${value ? 'var(--ink)' : 'var(--hair)'}`, background: 'transparent',
+    padding: '6px 0', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'inherit', width: 150, opacity: disabled ? 0.4 : 1,
+  }
+  return (
+    <div>
+      <p style={{ ...micro, margin: '0 0 5px' }}>{label}</p>
+      {native ? (
+        <input type="month" value={monthVal} disabled={disabled} onChange={(e) => onChange(fromMonthInput(e.target.value))} style={st} />
+      ) : (
+        <input type="text" value={value} disabled={disabled} placeholder="MM/YYYY" onChange={(e) => onChange(e.target.value)} style={st} />
+      )}
+    </div>
+  )
+}
 
 function Field({ label, value, onChange, big, mono: isMono }: {
   label: string; value: string; onChange: (v: string) => void; big?: boolean; mono?: boolean

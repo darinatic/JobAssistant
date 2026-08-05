@@ -3,10 +3,14 @@ import {
   type ResumeDoc,
   blankDoc,
   deserialize,
+  fromMonthInput,
   hasContent,
   normalizeDoc,
   serialize,
+  splitDateRange,
+  toMonthInput,
   unreviewedCount,
+  upgradeDoc,
 } from './resume-doc'
 
 const DOC: ResumeDoc = {
@@ -55,7 +59,9 @@ const DOC: ResumeDoc = {
           on: true,
           title: 'Backend Engineering Intern',
           org: 'Endowus · Singapore',
-          dates: 'JUN 2024 - PRESENT',
+          startDate: '06/2024',
+          endDate: '',
+          current: true,
           bullets: [
             { id: 'l1', on: true, text: 'Rebuilt the rebalancing job in Go.' },
             { id: 'l2', on: false, text: 'Hidden bullet.' },
@@ -66,7 +72,9 @@ const DOC: ResumeDoc = {
           on: false,
           title: 'Teaching Assistant',
           org: 'NUS',
-          dates: 'AUG 2023 - DEC 2023',
+          startDate: '08/2023',
+          endDate: '12/2023',
+          current: false,
           bullets: [{ id: 'l3', on: true, text: 'Ran weekly labs.' }],
         },
       ],
@@ -110,7 +118,7 @@ describe('serialize — sections by kind', () => {
 
   it('folds org into the ### heading with a right-aligned date', () => {
     const md = serialize(DOC)
-    expect(md).toContain('### Backend Engineering Intern, Endowus · Singapore | JUN 2024 - PRESENT')
+    expect(md).toContain('### Backend Engineering Intern, Endowus · Singapore | 06/2024 - Present')
   })
 
   it('emits enabled bullets as - lines and skips disabled ones', () => {
@@ -156,7 +164,7 @@ describe('serialize — reserved separator safety', () => {
           kind: 'blocks',
           on: true,
           blocks: [
-            { id: 'b', on: true, title: 'Dev | Ops', org: '', dates: '2024', bullets: [] },
+            { id: 'b', on: true, title: 'Dev | Ops', org: '', startDate: '2024', endDate: '', current: false, bullets: [] },
           ],
         },
       ],
@@ -240,6 +248,68 @@ describe('unreviewedCount', () => {
       ],
     }
     expect(unreviewedCount(doc)).toBe(1)
+  })
+})
+
+describe('date helpers (block dates split into start/end/current)', () => {
+  it('splits a range and normalizes months to MM/YYYY', () => {
+    expect(splitDateRange('Jun 2024 - Aug 2024')).toEqual({ startDate: '06/2024', endDate: '08/2024', current: false })
+  })
+  it('detects Present/Current as the "current" flag and clears the end', () => {
+    expect(splitDateRange('09/2025 - Present')).toEqual({ startDate: '09/2025', endDate: '', current: true })
+    expect(splitDateRange('Mar 2023 – current')).toEqual({ startDate: '03/2023', endDate: '', current: true })
+  })
+  it('keeps year-only or unparseable parts verbatim', () => {
+    expect(splitDateRange('2022 - 2026')).toEqual({ startDate: '2022', endDate: '2026', current: false })
+    expect(splitDateRange('Summer 2024')).toEqual({ startDate: 'Summer 2024', endDate: '', current: false })
+  })
+  it('handles a single date and an empty string', () => {
+    expect(splitDateRange('Mar 2025')).toEqual({ startDate: '03/2025', endDate: '', current: false })
+    expect(splitDateRange('')).toEqual({ startDate: '', endDate: '', current: false })
+  })
+  it('round-trips the month-input <-> MM/YYYY format', () => {
+    expect(toMonthInput('06/2024')).toBe('2024-06')
+    expect(toMonthInput('Jun 2024')).toBe('2024-06')
+    expect(toMonthInput('2022')).toBe('') // year-only can't map to a month
+    expect(fromMonthInput('2024-06')).toBe('06/2024')
+  })
+})
+
+describe('serialize — date range from start/end/current', () => {
+  const block = (over: Partial<import('./resume-doc').Block>) => ({
+    version: 1 as const,
+    sections: [{
+      id: 'experience', label: 'Experience', kind: 'blocks' as const, on: true,
+      blocks: [{ id: 'b', on: true, title: 'Eng', org: 'Acme', startDate: '', endDate: '', current: false, bullets: [], ...over }],
+    }],
+  })
+  const heading = (doc: ResumeDoc) => serialize(doc).split('\n').find((l) => l.startsWith('### '))!
+
+  it('renders start - Present when current', () => {
+    expect(heading(block({ startDate: '06/2024', current: true }))).toBe('### Eng, Acme | 06/2024 - Present')
+  })
+  it('renders start - end when both set', () => {
+    expect(heading(block({ startDate: '06/2022', endDate: '05/2024' }))).toBe('### Eng, Acme | 06/2022 - 05/2024')
+  })
+  it('renders start alone when there is no end', () => {
+    expect(heading(block({ startDate: '03/2025' }))).toBe('### Eng, Acme | 03/2025')
+  })
+})
+
+describe('normalizeDoc + upgradeDoc — dates', () => {
+  it('normalizeDoc splits the parser dates string into start/end/current', () => {
+    const doc = normalizeDoc({ sections: [{ id: 'experience', label: 'Experience', kind: 'blocks', blocks: [{ title: 'Eng', org: 'Acme', dates: 'Jun 2024 - Present' }] }] })
+    const b = doc.sections[0].blocks![0]
+    expect(b.startDate).toBe('06/2024')
+    expect(b.current).toBe(true)
+  })
+  it('upgradeDoc migrates a legacy block that still has a `dates` string', () => {
+    const legacy = { version: 1, sections: [{ id: 'experience', label: 'Experience', kind: 'blocks', on: true, blocks: [{ id: 'b', on: true, title: 'Eng', org: 'Acme', dates: '2022 - 2026', bullets: [] }] }] } as unknown as ResumeDoc
+    const b = upgradeDoc(legacy).sections[0].blocks![0]
+    expect(b.startDate).toBe('2022')
+    expect(b.endDate).toBe('2026')
+    expect(b.current).toBe(false)
+    expect((b as Record<string, unknown>).dates).toBeUndefined()
   })
 })
 

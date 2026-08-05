@@ -64,7 +64,9 @@ function freshBlock(withBullet: boolean): Block {
     on: true,
     title: '',
     org: '',
-    dates: '',
+    startDate: '',
+    endDate: '',
+    current: false,
     bullets: withBullet ? [{ id: newId('bullet'), on: true, text: '' }] : [],
   }
 }
@@ -110,11 +112,19 @@ export function setBlockField(
   doc: ResumeDoc,
   sectionId: string,
   blockId: string,
-  field: 'title' | 'org' | 'dates' | 'credential',
+  field: 'title' | 'org' | 'startDate' | 'endDate' | 'credential',
   value: string,
 ): ResumeDoc {
   return withBlock(doc, sectionId, blockId, (b) => {
     b[field] = value
+  })
+}
+
+// "Currently here" toggle: turning it on clears the end date (renders "Present").
+export function toggleBlockCurrent(doc: ResumeDoc, sectionId: string, blockId: string): ResumeDoc {
+  return withBlock(doc, sectionId, blockId, (b) => {
+    b.current = !b.current
+    if (b.current) b.endDate = ''
   })
 }
 

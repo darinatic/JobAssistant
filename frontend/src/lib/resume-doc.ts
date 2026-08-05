@@ -20,7 +20,9 @@ export type Block = {
   on: boolean
   title: string
   org: string
-  dates: string
+  startDate: string       // MM/YYYY (or as written when not a clean month)
+  endDate: string         // MM/YYYY; empty when `current`
+  current: boolean        // "still here" → renders the end as "Present"
   credential?: string
   bullets: Bullet[]
 }
@@ -54,13 +56,71 @@ const isNameLabel = (label: string) => /name/i.test(label)
 // for the date boundary.
 const noPipe = (v: string) => v.replace(/\s*\|\s*/g, ' / ').trim()
 
+// ---- block dates: MM/YYYY <-> native month-input, and range parsing ----
+
+const _MONTHS: Record<string, string> = {
+  jan: '01', january: '01', feb: '02', february: '02', mar: '03', march: '03',
+  apr: '04', april: '04', may: '05', jun: '06', june: '06', jul: '07', july: '07',
+  aug: '08', august: '08', sep: '09', sept: '09', september: '09', oct: '10', october: '10',
+  nov: '11', november: '11', dec: '12', december: '12',
+}
+
+// A stored date -> "YYYY-MM" for <input type="month">; '' when it isn't a clean month.
+export function toMonthInput(s: string): string {
+  const t = (s ?? '').trim()
+  let m: RegExpExecArray | null
+  if ((m = /^(\d{4})-(\d{2})$/.exec(t))) return t
+  if ((m = /^(\d{1,2})\/(\d{4})$/.exec(t))) return `${m[2]}-${m[1].padStart(2, '0')}`
+  if ((m = /^([A-Za-z]+)\.?\s+(\d{4})$/.exec(t))) {
+    const mm = _MONTHS[m[1].toLowerCase()]
+    if (mm) return `${m[2]}-${mm}`
+  }
+  return ''
+}
+
+// "YYYY-MM" (month input) -> "MM/YYYY".
+export function fromMonthInput(v: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec((v ?? '').trim())
+  return m ? `${m[2]}/${m[1]}` : ''
+}
+
+// Normalize a single date to MM/YYYY when we can, else keep it verbatim.
+function normMonth(s: string): string {
+  const mi = toMonthInput(s)
+  return mi ? fromMonthInput(mi) : (s ?? '').trim()
+}
+
+// Parse a free-form date range ("Jun 2024 - Present", "2022 – 2026") into fields.
+export function splitDateRange(s: string): { startDate: string; endDate: string; current: boolean } {
+  const raw = (s ?? '').trim()
+  if (!raw) return { startDate: '', endDate: '', current: false }
+  const parts = raw.split(/\s*[–—]\s*|\s+-\s+|\s+to\s+/i)
+  const rawEnd = (parts[1] ?? '').trim()
+  const current = /present|current|now|ongoing|to date|till date/i.test(rawEnd)
+  return {
+    startDate: normMonth(parts[0] ?? ''),
+    endDate: current ? '' : normMonth(rawEnd),
+    current,
+  }
+}
+
+// Fields -> the trailing "date" segment of the ### heading.
+function dateRange(b: Block): string {
+  const s = (b.startDate ?? '').trim()
+  const e = (b.endDate ?? '').trim()
+  if (b.current) return s ? `${s} - Present` : 'Present'
+  if (s && e) return `${s} - ${e}`
+  return s || e || ''
+}
+
 function roleHeading(b: Block): string {
   const orgPart = [noPipe(b.org), b.credential ? noPipe(b.credential) : '']
     .filter(Boolean)
     .join(' · ')
   let h = noPipe(b.title)
   if (orgPart) h += `, ${orgPart}`
-  if (b.dates.trim()) h += ` | ${b.dates.trim()}`
+  const dates = dateRange(b)
+  if (dates) h += ` | ${dates}`
   return h
 }
 
@@ -202,7 +262,7 @@ export function deserialize(md: string): ResumeDoc {
       const comma = left.indexOf(', ')
       const title = comma === -1 ? left : left.slice(0, comma).trim()
       const org = comma === -1 ? '' : left.slice(comma + 2).trim()
-      curBlock = { id: newId('block'), on: true, title, org, dates, bullets: [] }
+      curBlock = { id: newId('block'), on: true, title, org, ...splitDateRange(dates), bullets: [] }
       cur.blocks!.push(curBlock)
     } else if (/^[-*+]\s+/.test(s)) {
       const text = s.replace(/^[-*+]\s+/, '').trim()
@@ -256,7 +316,7 @@ export function normalizeDoc(raw: unknown): ResumeDoc {
         on: b.on !== false,
         title: String(b.title ?? ''),
         org: String(b.org ?? ''),
-        dates: String(b.dates ?? ''),
+        ...splitDateRange(String(b.dates ?? '')),
         credential: b.credential ? String(b.credential) : undefined,
         bullets: (b.bullets ?? []).map((l: any) => ({
           id: newId('bullet'),
@@ -268,6 +328,26 @@ export function normalizeDoc(raw: unknown): ResumeDoc {
     return sec
   })
   return { version: 1, sections }
+}
+
+// Upgrade a doc loaded from localStorage that predates split dates: turn any
+// legacy block `dates` string into startDate/endDate/current in place.
+export function upgradeDoc(doc: ResumeDoc): ResumeDoc {
+  for (const sec of doc.sections) {
+    if (sec.kind !== 'blocks') continue
+    for (const b of sec.blocks ?? []) {
+      const legacy = b as unknown as { dates?: string; startDate?: string }
+      if (legacy.startDate === undefined) {
+        Object.assign(b, splitDateRange(legacy.dates ?? ''))
+        delete legacy.dates
+      } else {
+        b.startDate ??= ''
+        b.endDate ??= ''
+        b.current ??= false
+      }
+    }
+  }
+  return doc
 }
 
 // Sections the parser flagged that the user hasn't confirmed yet (slice 2).

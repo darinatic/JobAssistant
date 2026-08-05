@@ -6,6 +6,7 @@ import {
   moveSection,
   removeBlock,
   resolveIssue,
+  toggleBlockCurrent,
   toggleBulletOn,
   toggleChip,
   setField,
@@ -22,7 +23,7 @@ const base = (): ResumeDoc => ({
       kind: 'blocks',
       on: true,
       blocks: [
-        { id: 'b1', on: true, title: 'A', org: '', dates: '', bullets: [{ id: 'l1', on: true, text: 'x' }] },
+        { id: 'b1', on: true, title: 'A', org: '', startDate: '', endDate: '', current: false, bullets: [{ id: 'l1', on: true, text: 'x' }] },
       ],
     },
     { id: 'skills', label: 'Skills', kind: 'chips', on: true, chips: [{ text: 'Go', on: true }] },
@@ -82,6 +83,17 @@ describe('setField', () => {
     const out = setField(doc, 'contact', 0, 'Jane Doe')
     expect(out.sections[0].fields![0].value).toBe('Jane Doe')
     expect(doc.sections[0].fields![0].value).toBe('')
+  })
+})
+
+describe('toggleBlockCurrent', () => {
+  it('turning "current" on clears the end date', () => {
+    const doc = base()
+    doc.sections.find((s) => s.id === 'experience')!.blocks![0].endDate = '05/2024'
+    const out = toggleBlockCurrent(doc, 'experience', 'b1')
+    const b = out.sections.find((s) => s.id === 'experience')!.blocks![0]
+    expect(b.current).toBe(true)
+    expect(b.endDate).toBe('')
   })
 })
 
