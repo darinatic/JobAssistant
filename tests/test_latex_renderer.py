@@ -168,3 +168,19 @@ def test_end_to_end_compile_produces_pdf():
     pdf = render_latex_pdf_sync(tex, job_name="resume")
     assert pdf[:5] == b"%PDF-"
     assert len(pdf) > 1000
+
+
+def test_compact_template_uses_a_denser_preamble():
+    md = "# Jane Doe\n\n## Skills\n\nPython, RAG\n"
+    standard = markdown_to_latex(md, template="standard")
+    compact = markdown_to_latex(md, template="compact")
+    # Both render the same body...
+    assert "Jane Doe" in standard and "Jane Doe" in compact
+    # ...but the compact preamble is denser: smaller font + tighter margins.
+    assert "11pt" in standard and "10pt" in compact
+    assert "margin=0.6in" in standard and "margin=0.45in" in compact
+
+
+def test_unknown_template_falls_back_to_standard():
+    md = "# A\n\n## Skills\n\nGo\n"
+    assert markdown_to_latex(md, template="bogus") == markdown_to_latex(md, template="standard")

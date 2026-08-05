@@ -229,22 +229,27 @@ function SectionEditor({ sec, set }: { sec: Section; set: (d: ResumeDoc) => void
 
 // ---- preview (real Tectonic PDF) -------------------------------------------
 
+const TEMPLATES: Array<'standard' | 'compact'> = ['standard', 'compact']
+
 function PreviewPane({ doc, onTailor }: { doc: ResumeDoc; onTailor: () => void }) {
   const md = useMemo(() => serialize(doc, { include: 'enabled' }), [doc])
+  const [tpl, setTpl] = useState<'standard' | 'compact'>('standard')
   const [renderedMd, setRenderedMd] = useState<string | null>(null)
+  const [renderedTpl, setRenderedTpl] = useState<'standard' | 'compact'>('standard')
   const [url, setUrl] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
-  const dirty = md !== renderedMd
+  const dirty = md !== renderedMd || tpl !== renderedTpl
   const fit = estimatePageFit(md)
 
   async function render() {
     if (rendering) return
     setRendering(true)
     try {
-      const blob = await api.resumePdf(md)
+      const blob = await api.resumePdf(md, tpl)
       const next = URL.createObjectURL(blob)
       setUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return next })
       setRenderedMd(md)
+      setRenderedTpl(tpl)
     } catch {
       toast.error('Could not render the PDF. Is the backend running?')
     } finally {
@@ -254,7 +259,7 @@ function PreviewPane({ doc, onTailor }: { doc: ResumeDoc; onTailor: () => void }
 
   async function downloadPdf() {
     try {
-      const blob = await api.resumePdf(md)
+      const blob = await api.resumePdf(md, tpl)
       const a = document.createElement('a')
       const href = URL.createObjectURL(blob)
       a.href = href; a.download = 'resume.pdf'; a.click(); URL.revokeObjectURL(href)
@@ -265,7 +270,14 @@ function PreviewPane({ doc, onTailor }: { doc: ResumeDoc; onTailor: () => void }
     <div style={{ borderLeft: '2px solid var(--ink)', background: 'var(--surface)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '13px 18px', borderBottom: '2px solid var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--paper)' }}>
         <span style={micro}>render · ≈ {fit.pages} page{fit.pages > 1 ? 's' : ''}{fit.fits ? ' ✓' : ''}</span>
-        <span style={{ ...micro, letterSpacing: '0.1em' }}>standard</span>
+        <div style={{ display: 'flex', border: '1.5px solid var(--ink)' }}>
+          {TEMPLATES.map((t) => (
+            <button key={t} onClick={() => setTpl(t)}
+              style={{ ...mono, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', padding: '6px 11px', cursor: 'pointer', border: 0, borderLeft: t === 'compact' ? '1.5px solid var(--ink)' : undefined, background: tpl === t ? 'var(--ink)' : 'transparent', color: tpl === t ? 'var(--paper)' : 'var(--dim)' }}>
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
       <div style={{ padding: '11px 18px', borderBottom: '2px solid var(--ink)', display: 'flex', alignItems: 'center', gap: 12, background: dirty || rendering ? 'var(--honesty-bg, transparent)' : 'transparent' }}>
         <span style={{ width: 8, height: 8, flex: '0 0 8px', background: dirty || rendering ? 'var(--honesty)' : 'var(--have)' }} />
@@ -364,8 +376,8 @@ export function StageBuilder({ doc, setDoc, uploading, onUpload, onTailor }: {
           <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 11, border: '2px dashed var(--ink)', padding: '48px 24px', cursor: 'pointer' }}>
             <span style={{ ...mono, fontSize: 30, fontWeight: 700 }}>[ + ]</span>
             <span style={{ ...mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase' }}>{uploading ? 'parsing…' : 'drop resume or browse'}</span>
-            <span style={{ fontSize: 14, color: 'var(--dim)' }}>PDF · text-based, not a scan</span>
-            <input ref={fileRef} type="file" accept="application/pdf" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])} />
+            <span style={{ fontSize: 14, color: 'var(--dim)' }}>PDF or DOCX · scans are read too</span>
+            <input ref={fileRef} type="file" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display: 'none' }} onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])} />
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1, height: 2, background: 'var(--rule)' }} />

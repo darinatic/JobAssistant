@@ -60,6 +60,35 @@ _RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
 \end{document}
 """
 
+# Compact variant: same ATS-safe structure (single column, Roboto, plain sections,
+# no custom glyphs) but denser — 10pt, tighter margins/lists/section spacing — to
+# fit more on a page. Selected via the `template` arg.
+_RESUME_PREAMBLE_COMPACT = r"""\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[default]{roboto}
+\usepackage[a4paper,margin=0.45in]{geometry}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+
+\setlist[itemize]{leftmargin=1.1em, itemsep=0pt, topsep=1pt, parsep=0pt}
+
+\titleformat{\section}{\normalsize\bfseries}{}{0em}{\MakeUppercase}[\titlerule]
+\titlespacing*{\section}{0pt}{6pt}{2pt}
+
+\begin{document}
+@@BODY@@
+\end{document}
+"""
+
+_RESUME_PREAMBLES = {"standard": _RESUME_PREAMBLE, "compact": _RESUME_PREAMBLE_COMPACT}
+
+
 _COVER_PREAMBLE = r"""\documentclass[11pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -157,7 +186,7 @@ def _contact_parts(lines: list[str]) -> list[str]:
 
 
 # --- markdown → LaTeX -------------------------------------------------------
-def markdown_to_latex(md_content: str, candidate_name: str = "Resume") -> str:
+def markdown_to_latex(md_content: str, candidate_name: str = "Resume", template: str = "standard") -> str:
     """Convert resume markdown into a full ATS-safe LaTeX document.
 
     Handles the constructs the tailor agent emits: an ``# Name`` header with
@@ -239,7 +268,8 @@ def markdown_to_latex(md_content: str, candidate_name: str = "Resume") -> str:
             out.append(_inline(stripped) + r"\par")
 
     close_list()
-    return _RESUME_PREAMBLE.replace("@@BODY@@", "\n".join(out))
+    preamble = _RESUME_PREAMBLES.get(template, _RESUME_PREAMBLE)
+    return preamble.replace("@@BODY@@", "\n".join(out))
 
 
 def cover_letter_to_latex(text: str) -> str:
@@ -316,8 +346,10 @@ async def render_latex_pdf_bytes(tex: str, *, job_name: str = "document") -> byt
     return await asyncio.to_thread(render_latex_pdf_sync, tex, job_name=job_name)
 
 
-async def resume_markdown_to_pdf_bytes(md_content: str, candidate_name: str = "Resume") -> bytes:
-    tex = markdown_to_latex(md_content, candidate_name=candidate_name)
+async def resume_markdown_to_pdf_bytes(
+    md_content: str, candidate_name: str = "Resume", template: str = "standard"
+) -> bytes:
+    tex = markdown_to_latex(md_content, candidate_name=candidate_name, template=template)
     return await render_latex_pdf_bytes(tex, job_name="resume")
 
 

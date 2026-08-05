@@ -227,6 +227,7 @@ class TailorResponse(BaseModel):
 class ResumePdfRequest(BaseModel):
     resume_markdown: str = Field(min_length=20)
     download: bool = False
+    template: Literal["standard", "compact"] = "standard"
 
 
 class CoverLetterPdfRequest(BaseModel):
@@ -284,21 +285,28 @@ async def health() -> HealthResponse:
 
 @app.post("/resume/parse", response_model=ResumeParseResponse)
 async def resume_parse(file: UploadFile = File(...)) -> ResumeParseResponse:
-    """PDF resume → structured section model (MarkItDown text → one Haiku structuring
-    pass). Returned to the client; never stored. OCR for scans is a later slice."""
+    """PDF/DOCX resume → structured section model (MarkItDown text → one Haiku
+    structuring pass). A scanned PDF (no extractable text) falls back to Claude's
+    vision to OCR + structure it. Returned to the client; never stored."""
     from markitdown import MarkItDown
 
-    pdf_bytes = await file.read()
+    raw = await file.read()
+    is_docx = (file.filename or "").lower().endswith(".docx")
+    ext = ".docx" if is_docx else ".pdf"
     try:
-        result = MarkItDown().convert_stream(BytesIO(pdf_bytes), file_extension=".pdf")
+        result = MarkItDown().convert_stream(BytesIO(raw), file_extension=ext)
         text = result.text_content
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Failed to parse PDF: {e}") from e
+        raise HTTPException(status_code=422, detail=f"Failed to parse resume: {e}") from e
 
+    agent = ResumeStructurerAgent()
     if len(text.strip()) < 100:
-        raise HTTPException(status_code=422, detail="Parsed resume is too short — is this a text PDF (not a scan)?")
-
-    doc = await ResumeStructurerAgent().structure(text)
+        if is_docx:
+            # A DOCX is always text-based; too little text means an empty/broken file.
+            raise HTTPException(status_code=422, detail="This DOCX has almost no text — is it the right file?")
+        doc = await agent.structure_from_file(raw, "application/pdf")  # OCR the scan
+    else:
+        doc = await agent.structure(text)
     return ResumeParseResponse(doc=doc, chars=len(text))
 
 
@@ -508,7 +516,8 @@ async def resume_pdf(req: ResumePdfRequest) -> Response:
     from src.utils.pdf_converter import candidate_name_from_markdown
 
     pdf_bytes = await _render_pdf_or_503(
-        resume_markdown_to_pdf_bytes, req.resume_markdown, candidate_name_from_markdown(req.resume_markdown)
+        resume_markdown_to_pdf_bytes, req.resume_markdown,
+        candidate_name_from_markdown(req.resume_markdown), req.template,
     )
     disposition = "attachment" if req.download else "inline"
     return Response(

@@ -66,6 +66,12 @@ Resume:
 
 Return the structured sections. Copy the candidate's wording verbatim; never invent."""
 
+_HUMAN_OCR_PROMPT = (
+    "This resume is a scanned/image document with no extractable text. Read all of its "
+    "text and split it into structured sections following the schema. Copy the "
+    "candidate's wording verbatim; never invent."
+)
+
 
 class ResumeStructurerAgent:
     PROMPT_NAME = "resume_structurer"
@@ -84,5 +90,21 @@ class ResumeStructurerAgent:
         result: ResumeDocModel = await self.structured_llm.ainvoke([
             SystemMessage(content=self.prompt.text),
             HumanMessage(content=_HUMAN_PROMPT.format(resume_text=resume_text)),
+        ])
+        return result
+
+    async def structure_from_file(self, data: bytes, media_type: str) -> ResumeDocModel:
+        """OCR path for scanned PDFs (or images): send the file to Claude's vision as a
+        document/image content block and structure it in one call — no extra dep."""
+        import base64
+
+        b64 = base64.standard_b64encode(data).decode("ascii")  # no newlines
+        if media_type == "application/pdf":
+            block: dict = {"type": "document", "source": {"type": "base64", "media_type": media_type, "data": b64}}
+        else:
+            block = {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
+        result: ResumeDocModel = await self.structured_llm.ainvoke([
+            SystemMessage(content=self.prompt.text),
+            HumanMessage(content=[block, {"type": "text", "text": _HUMAN_OCR_PROMPT}]),
         ])
         return result

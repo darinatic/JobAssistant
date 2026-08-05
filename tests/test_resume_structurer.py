@@ -49,9 +49,40 @@ def test_resume_parse_returns_structured_doc(client):
     assert body["doc"]["sections"][0]["issue"] is None
 
 
-def test_resume_parse_rejects_a_scan(client):
-    with patch("markitdown.MarkItDown", _markitdown("too short")):
+def test_docx_upload_uses_the_text_path(client):
+    text = "Jane Doe — Engineer at Acme.\n" + "detail line. " * 30
+    agent = MagicMock()
+    agent.structure = AsyncMock(return_value=_fake_doc())
+    agent.structure_from_file = AsyncMock()
+    with patch("markitdown.MarkItDown", _markitdown(text)) as md, \
+         patch("src.api.ResumeStructurerAgent", return_value=agent):
         r = client.post("/resume/parse",
-                        files={"file": ("scan.pdf", b"%PDF-1.4", "application/pdf")})
+                        files={"file": ("cv.docx", b"PK\x03\x04fake", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+    assert r.status_code == 200
+    # DOCX is converted with the .docx extension, and structured via the text path.
+    assert md.return_value.convert_stream.call_args.kwargs["file_extension"] == ".docx"
+    agent.structure.assert_awaited_once()
+    agent.structure_from_file.assert_not_awaited()
+
+
+def test_scanned_pdf_falls_back_to_vision_ocr(client):
+    agent = MagicMock()
+    agent.structure = AsyncMock()
+    agent.structure_from_file = AsyncMock(return_value=_fake_doc())
+    with patch("markitdown.MarkItDown", _markitdown("")), \
+         patch("src.api.ResumeStructurerAgent", return_value=agent):
+        r = client.post("/resume/parse",
+                        files={"file": ("scan.pdf", b"%PDF-1.4 image only", "application/pdf")})
+    assert r.status_code == 200
+    # No extractable text + a PDF → OCR via Claude vision, not a 422.
+    agent.structure_from_file.assert_awaited_once()
+    assert agent.structure_from_file.await_args.args[1] == "application/pdf"
+    agent.structure.assert_not_awaited()
+
+
+def test_empty_docx_is_rejected(client):
+    with patch("markitdown.MarkItDown", _markitdown("short")):
+        r = client.post("/resume/parse",
+                        files={"file": ("empty.docx", b"PK\x03\x04", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
     assert r.status_code == 422
-    assert "scan" in r.json()["detail"].lower()
+    assert "docx" in r.json()["detail"].lower()

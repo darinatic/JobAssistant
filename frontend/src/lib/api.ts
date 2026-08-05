@@ -246,7 +246,8 @@ export const api = {
     url?: string; posted_date?: string
   }) => postJson<{ flags: RedFlag[] }>('/job/red-flags', body),
 
-  resumePdf: (resume_markdown: string) => postForBlob('/tailored/resume.pdf', { resume_markdown }),
+  resumePdf: (resume_markdown: string, template: 'standard' | 'compact' = 'standard') =>
+    postForBlob('/tailored/resume.pdf', { resume_markdown, template }),
   coverLetterPdf: (cover_letter_text: string) =>
     postForBlob('/tailored/cover-letter.pdf', { cover_letter_text }),
 }
