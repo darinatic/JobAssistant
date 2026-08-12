@@ -34,11 +34,20 @@ class LatexCompileError(RuntimeError):
 # --- LaTeX template ---------------------------------------------------------
 # A single embedded preamble. `{body}` is filled with converted markdown.
 # `article` is single-column by default; we never load multicol/minipage.
-_RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
+#
+# Density note (2026-08-12): these were retuned after measuring a real full-length
+# one-page resume through the renderer. The dominant space cost was NOT font size
+# or margins — it was *vertical spacing*. `parskip` defaults to 0.5\baselineskip
+# and fires on every `\par`, which in this renderer means every `### role` heading
+# and every project title; combined with list and \section spacing that was worth a
+# full page. Pinning \parskip low and tightening the lists/sections reclaimed it.
+# 11pt was measured and rejected: it cannot hold a full-length resume on one page
+# at any margin (tested down to 0.4in with zero parskip and 0.95 leading).
+_RESUME_PREAMBLE = r"""\documentclass[10pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[default]{roboto}
-\usepackage[a4paper,margin=0.6in]{geometry}
+\usepackage[a4paper,margin=0.5in]{geometry}
 \usepackage[hidelinks]{hyperref}
 \usepackage{enumitem}
 \usepackage{titlesec}
@@ -46,14 +55,17 @@ _RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
 
 \pagestyle{empty}
 \setlength{\parindent}{0pt}
+% parskip's default (0.5\baselineskip) applies to every heading line and paragraph.
+% Pin it small: this is the single biggest density lever in the template.
+\setlength{\parskip}{1.5pt}
 
 % Tight, standard bullet lists — dense enough for one page, no custom glyphs.
-\setlist[itemize]{leftmargin=1.25em, itemsep=1pt, topsep=2pt, parsep=0pt}
+\setlist[itemize]{leftmargin=1.1em, itemsep=0pt, topsep=1pt, parsep=0pt}
 
 % Plain bold section headings with a full-width rule underneath. No color, no
 % custom fonts — parsers read these as ordinary headings.
-\titleformat{\section}{\large\bfseries}{}{0em}{\MakeUppercase}[\titlerule]
-\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titleformat{\section}{\normalsize\bfseries}{}{0em}{\MakeUppercase}[\titlerule]
+\titlespacing*{\section}{0pt}{6pt}{2pt}
 
 \begin{document}
 @@BODY@@
@@ -61,13 +73,14 @@ _RESUME_PREAMBLE = r"""\documentclass[11pt]{article}
 """
 
 # Compact variant: same ATS-safe structure (single column, Roboto, plain sections,
-# no custom glyphs) but denser — 10pt, tighter margins/lists/section spacing — to
-# fit more on a page. Selected via the `template` arg.
+# no custom glyphs) and the same 10pt body, but squeezed further — narrower margins,
+# tighter leading and section spacing. The escape hatch for a resume the user won't
+# cut. Selected via the `template` arg.
 _RESUME_PREAMBLE_COMPACT = r"""\documentclass[10pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[default]{roboto}
-\usepackage[a4paper,margin=0.45in]{geometry}
+\usepackage[a4paper,margin=0.4in]{geometry}
 \usepackage[hidelinks]{hyperref}
 \usepackage{enumitem}
 \usepackage{titlesec}
@@ -75,11 +88,13 @@ _RESUME_PREAMBLE_COMPACT = r"""\documentclass[10pt]{article}
 
 \pagestyle{empty}
 \setlength{\parindent}{0pt}
+\setlength{\parskip}{1pt}
+\linespread{0.97}
 
-\setlist[itemize]{leftmargin=1.1em, itemsep=0pt, topsep=1pt, parsep=0pt}
+\setlist[itemize]{leftmargin=1.0em, itemsep=0pt, topsep=1pt, parsep=0pt}
 
 \titleformat{\section}{\normalsize\bfseries}{}{0em}{\MakeUppercase}[\titlerule]
-\titlespacing*{\section}{0pt}{6pt}{2pt}
+\titlespacing*{\section}{0pt}{4pt}{1pt}
 
 \begin{document}
 @@BODY@@

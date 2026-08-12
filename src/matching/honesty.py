@@ -45,6 +45,15 @@ _MAG_RE = re.compile(r"\d+(?:\.\d+)?\s*[kmb]\b", re.IGNORECASE)
 _MONEY_RE = re.compile(r"[$€£]\s?\d[\d,]*(?:\.\d+)?")
 _BIGNUM_RE = re.compile(r"\d[\d,]{2,}")  # 100+, comma-formatted allowed
 
+# A bare calendar year is a DATE, not an achievement. Resumes are full of them
+# (role ranges, graduation years) and the tailor legitimately reformats them —
+# "Acme (2022-2025)" in the CV becomes "Acme | 2022 - 2025" in the output so the
+# PDF right-aligns the dates. Counting years as metrics made every such rewrite
+# look like three invented figures. Consistent with the linter's conservative
+# stance: an achievement that happens to be exactly a 4-digit year is rare, a
+# reformatted date range is universal.
+_YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
+
 # Contact info carries digits (phone, profile URLs, email) that are NOT achievement
 # metrics — strip it before the metric scan so a phone number isn't flagged as an
 # invented figure. Emails first, then URLs, then phone numbers.
@@ -54,9 +63,14 @@ _URL_RE = re.compile(
     r"|[\w-]+\.(?:com|org|io|dev|net|gov|sg|co|ai|me|edu|xyz)\b[/\w.#?=&%-]*",
     re.IGNORECASE,
 )
+# The local-grouped branch would otherwise swallow a hyphenated year range —
+# "2022-2025" is shaped exactly like "9123-4567". That silently deleted the dates
+# from the CV side while leaving the output's spaced "2022 - 2025" intact, so the
+# years read as invented. The lookahead exempts year-to-year ranges.
 _PHONE_RE = re.compile(
     r"\+\d[\d\s().-]{5,}\d"      # international: "+65 9123 4567", "+1 (415) 555-0100"
-    r"|\b\d{3,4}[\s.-]\d{4}\b",  # local grouped: "9123 4567", "9123-4567"
+    r"|\b(?!(?:19|20)\d{2}\s*[-–—/.\s]\s*(?:19|20)\d{2})"
+    r"\d{3,4}[\s.-]\d{4}\b",     # local grouped: "9123 4567", "9123-4567"
 )
 
 
@@ -107,7 +121,10 @@ def _metrics(text: str) -> set[str]:
     out: set[str] = set()
     for rx in (_PCT_RE, _MAG_RE, _MONEY_RE, _BIGNUM_RE):
         for hit in rx.findall(text):
-            out.add(_norm_metric(hit))
+            norm = _norm_metric(hit)
+            if _YEAR_RE.match(norm):
+                continue  # a calendar year is a date, not an achievement
+            out.add(norm)
     return out
 
 

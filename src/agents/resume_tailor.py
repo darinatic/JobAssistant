@@ -4,31 +4,33 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.schemas import ParsedJobDescription, SkillMatch, TailoredResume
+from src.llm import chat_model
 from src.prompts import get_prompt
 from src.utils.config import settings
 
 # Tailoring styles — how much *editorial latitude* the tailor takes. The honesty
 # rules (no fabrication / domain / title / method invention) are invariant across
 # ALL styles and live in the system prompt; only the cut/reorder/rephrase freedom
-# below changes. Each entry is rule #7 of the human prompt.
+# below changes. Each entry is rule #8 of the human prompt.
 TAILOR_STYLES = ("faithful", "aggressive")
 
 _STYLE_RULES = {
     "faithful": (
-        "7. **Preserve everything — reorder and rephrase only.** Keep ALL roles, "
-        "bullets, and sections; do not drop or merge them. Retune the summary and "
+        "8. **Preserve everything — reorder and rephrase only.** Keep ALL roles, "
+        "bullets, and sections; do not drop or merge them, and do not add any. "
+        "Retune the summary (only if the CV has one) and "
         "the ordering of skills and bullets to lead with what matches the JD, and "
         "tighten wording where natural. Favor completeness over brevity."
     ),
     "aggressive": (
-        "7. **Maximize fit — restructure for this role, ONE PAGE HARD.** The result "
-        "MUST fit a single page: in this template that is about 45 lines of content "
-        "(~40 short bullets TOTAL across the whole resume, fewer once section headers "
-        "are counted). Budget space in priority order — header, summary, skills, then "
+        "8. **Maximize fit — restructure for this role, ONE PAGE HARD.** The result "
+        "MUST fit a single page: in this template that is about 57 lines of content "
+        "(~50 short bullets TOTAL across the whole resume, fewer once section headers "
+        "are counted). Budget space in priority order — header, summary (only if the "
+        "CV already has one), skills, then "
         "your MOST relevant experience — and cut from the bottom until it fits. CUT "
         "the Projects section FIRST: personal/side projects are the least load-bearing "
         "on an experienced resume, so drop them entirely (keep at most ONE line, and "
@@ -51,12 +53,12 @@ def normalize_style(style: str | None, *, concise: bool = False) -> str:
 
 
 def _budget_rule(target_line_budget: float) -> str:
-    """Rule #7 for a "fit to page" re-tailor — an explicit rendered-line budget
+    """Rule #8 for a "fit to page" re-tailor — an explicit rendered-line budget
     (from ``page_budget.page_fit_target``) that overrides the style's latitude
     rule. Used to compress a small remainder off an under-used trailing page."""
     n = int(round(target_line_budget))
     return (
-        f"7. **Fit within about {n} rendered lines — hard length budget.** The current "
+        f"8. **Fit within about {n} rendered lines — hard length budget.** The current "
         "draft spills a little past a full page and wastes a near-empty trailing page. "
         "Compress to fit: cut the least role-relevant bullets and older/weaker roles "
         "first, tighten verbose bullets, and drop side projects before core experience. "
@@ -69,12 +71,7 @@ class ResumeTailorAgent:
     PROMPT_NAME = "resume_tailor"
 
     def __init__(self, model: str | None = None):
-        self.llm = ChatAnthropic(
-            model=model or settings.anthropic_sonnet_model,
-            api_key=settings.anthropic_api_key.get_secret_value(),
-            max_tokens=8192,
-            temperature=0,
-        )
+        self.llm = chat_model("smart", override=model, max_tokens=8192, temperature=0)
         self.structured_llm = self.llm.with_structured_output(TailoredResume)
         self._master_cv: str | None = None
         self.prompt = get_prompt(self.PROMPT_NAME)
@@ -182,22 +179,24 @@ class ResumeTailorAgent:
 3. **Honesty (hard rule)**: only use skills, tools, and experience that appear in
    the candidate's CV above. NEVER add any skill from the "Skills NOT in the
    candidate's CV" list, and never invent domains, metrics, methods, or titles.
-3. **ATS exact-keyword matching**: where the CV genuinely supports a required
+4. **ATS exact-keyword matching**: where the CV genuinely supports a required
    skill, use the JD's EXACT wording for it — ATS parsers weight literal matches
    over synonyms. Spell out then abbreviate on first use, e.g. "Machine Learning
    (ML)", so both the full term and the acronym match.
-4. Reorder the skills section and experience bullets to lead with matched skills.
+5. Reorder the skills section and experience bullets to lead with matched skills.
    Keep **Skills** as a compact plain list — comma-separated, or the CV's own
    grouping if it already has one. Do NOT invent category headers like "Languages:"
    / "Frameworks:" / "Tools:": a flat list matches real resumes and saves space.
-5. Incorporate keywords naturally (don't keyword-stuff).
-6. **Summary — write like a person, not a keyword dump.** 2-3 tight sentences that
-   LEAD with the single most relevant thing about this candidate for THIS role, so a
-   recruiter is sold in the first sentence or two. Don't cram every skill in — leave
-   the rest for the Skills and Experience sections. Plain, confident, specific;
-   no buzzword stacking or generic "results-driven professional" filler.
+6. Incorporate keywords naturally (don't keyword-stuff).
+7. **Mirror the CV's sections.** Output the sections the CV above actually has,
+   under its own names for them, reordered so the most role-relevant content leads.
+   **If the CV has no summary/profile section, do NOT write one** — its absence is
+   the candidate's choice, not a gap to fill. If it DOES have one, keep it to 2
+   sentences in the candidate's own voice, leading with the single most relevant
+   thing for THIS role; no buzzword stacking and none of the machine-written filler
+   ("results-driven", "proven track record", "passionate about").
 {length_rule}
-8. Output the complete markdown resume, then list changes made and keywords incorporated."""
+9. Output the complete markdown resume, then list changes made and keywords incorporated."""
 
     def _format_list(self, items: list[str]) -> str:
         if not items:

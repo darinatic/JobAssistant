@@ -90,3 +90,53 @@ def test_metric_reformatting_is_not_flagged():
     # 10k -> 10,000 and 92% -> 92 % must normalize equal (no false positive).
     tailored = _CV.replace("10k queries", "10,000 queries").replace("92% accuracy", "92 % accuracy")
     assert lint_resume(_CV, tailored).ok
+
+
+# --- dates are not achievements ---------------------------------------------
+# The markdown contract puts a role's dates at the end of its `### ` heading after
+# " | " so the PDF right-aligns them. That reformats the CV's own "(2023-2025)" into
+# "| 2023 - 2025", which used to read as three invented figures.
+
+def test_date_range_reformatting_is_not_flagged():
+    tailored = _CV.replace(
+        "### ML Engineer, Acme (2023-2025)",
+        "### ML Engineer, Acme | 2023 - 2025",
+    )
+    assert lint_resume(_CV, tailored).ok, lint_resume(_CV, tailored).as_dicts()
+
+
+def test_hyphenated_year_range_is_not_stripped_as_a_phone_number():
+    # "2023-2025" is shaped exactly like the local grouped phone "9123-4567". When
+    # the phone regex ate it, the CV silently lost its years while the output kept
+    # them, so every reformatted date looked fabricated.
+    from src.matching.honesty import _strip_contact
+
+    assert "2023-2025" in _strip_contact("### ML Engineer, Acme (2023-2025)")
+
+
+def test_real_phone_numbers_are_still_stripped():
+    from src.matching.honesty import _strip_contact
+
+    assert "9123 4567" not in _strip_contact("Jane Tan | 9123 4567")
+    assert "9123-4567" not in _strip_contact("Jane Tan | 9123-4567")
+    assert "3725" not in _strip_contact("Jane Tan | +65 9450 3725")
+
+
+def test_a_bare_year_is_never_treated_as_a_metric():
+    from src.matching.honesty import _metrics
+
+    assert _metrics("Graduated 2018, shipped 300 features") == {"300"}
+
+
+def test_a_new_graduation_year_is_not_a_fabrication():
+    # Adding an education year the CV words differently is a date edit, not an
+    # invented achievement — the entry check still guards the school itself.
+    tailored = _CV.replace("NUS (2023)", "NUS | 2019 - 2023")
+    assert lint_resume(_CV, tailored).ok
+
+
+def test_a_genuinely_invented_metric_is_still_caught():
+    # The year exemption must not blunt the real check.
+    tailored = _CV.replace("92% accuracy", "99.7% accuracy")
+    assert not lint_resume(_CV, tailored).ok
+    assert "99.7%" in {f.value for f in lint_resume(_CV, tailored).of("metric")}

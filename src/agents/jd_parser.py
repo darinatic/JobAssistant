@@ -4,12 +4,11 @@ import logging
 import re
 
 import httpx
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.schemas import ParsedJobDescription
+from src.llm import chat_model
 from src.prompts import get_prompt
-from src.utils.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -40,12 +39,7 @@ class JDParserAgent:
     PROMPT_NAME = "jd_parser"
 
     def __init__(self, model: str | None = None):
-        self.llm = ChatAnthropic(
-            model=model or settings.anthropic_haiku_model,
-            api_key=settings.anthropic_api_key.get_secret_value(),
-            max_tokens=4096,
-            temperature=0,
-        )
+        self.llm = chat_model("fast", override=model, max_tokens=4096, temperature=0)
         self.structured_llm = self.llm.with_structured_output(ParsedJobDescription)
         self.prompt = get_prompt(self.PROMPT_NAME)
 

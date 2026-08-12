@@ -10,10 +10,9 @@ import re
 
 import httpx
 from bs4 import BeautifulSoup
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.utils.config import settings
+from src.llm import chat_model
 
 log = logging.getLogger(__name__)
 
@@ -80,12 +79,7 @@ async def extract_jd_from_url(url: str) -> str:
     if len(text) < 200:
         raise ValueError("That page had too little readable text — it may require JavaScript or block scraping. Paste the JD instead.")
 
-    llm = ChatAnthropic(
-        model=settings.anthropic_haiku_model,
-        api_key=settings.anthropic_api_key.get_secret_value(),
-        max_tokens=2000,
-        temperature=0,
-    )
+    llm = chat_model("fast", max_tokens=2000, temperature=0)
     resp = await llm.ainvoke([SystemMessage(content=_SYSTEM), HumanMessage(content=text[:16000])])
     jd = (resp.content if hasattr(resp, "content") else str(resp)).strip()
     if not jd or jd.strip() == "NO_JD" or len(jd) < 40:

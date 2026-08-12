@@ -1,38 +1,83 @@
-"""Deterministic one-page estimator for the ATS LaTeX resume template.
+"""Deterministic page estimator for the ATS LaTeX resume templates.
 
-The template renders at a fixed density, so page count is a deterministic function
-of the markdown. Empirical calibration (rendering resumes of growing length through
-the real Roboto template and counting PDF pages with pypdf — see
-scripts/calibrate_page_budget.py) put the one-page ceiling at 53.8 estimator-lines
-(47 bullets spilled to a 2nd page); the last one-page resume scored 52.8 (46
-bullets). Each element maps to an estimated line height below, and long bullets
-wrap by character width.
+Each template renders at a fixed density, so page count is a deterministic function
+of the markdown. That lets us (a) tell the tailor a concrete line budget, and (b)
+show the user a page estimate — without paying a Tectonic render on every tailor.
 
-This lets us (a) tell the tailor a concrete budget, and (b) show the user a page
-estimate — without paying a Tectonic render on every tailor.
+Density differs per template, so every constant here is **per template**. They are
+measured, not guessed: ``scripts/calibrate_page_budget.py`` renders through the live
+LaTeX pipeline and reads the PDFs back with pypdf. Element heights come from page
+capacity in each element (a page holds B bullets but only S section headings, so a
+section heading is B/S bullets tall), which captures the vertical spacing around an
+element rather than just its text line. Re-run that script after any preamble edit
+and copy the numbers back here.
+
+The frontend mirrors these constants in ``frontend/src/lib/page-fit.ts`` to render the
+live page badge — keep the two in sync.
 """
 
 from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 
-# ~95 visible chars fit on one line at Roboto 11pt in this template's text width
-# (an ~88-char bullet rendered to exactly one line in calibration; re-verified
-# after the Latin Modern -> Roboto font swap, unchanged).
-_CHARS_PER_LINE = 95
+DEFAULT_TEMPLATE = "standard"
 
-# Estimated rendered line-height per markdown element (calibrated to the template).
-_H_NAME = 2.5      # '# Name' — large heading + the contact line's own cost is separate
-_H_SECTION = 2.0   # '## Section' — heading + the \section vertical spacing
-_H_ROLE = 1.3      # '### Role/Project' — subheading, tighter
 
-# One-page capacity in this estimator's units. Calibrated against the Roboto
-# template by rendering + counting pages (scripts/calibrate_page_budget.py): the
-# last one-page resume scored 52.8 and the first two-page one scored 53.8, so 53
-# is the boundary. Target 50 leaves a safety margin for font/label variance.
-PAGE_LINE_CAPACITY = 53.0
-ONE_PAGE_TARGET = 50.0
+@dataclass(frozen=True)
+class TemplateBudget:
+    """Calibrated density constants for one LaTeX template."""
+
+    chars_per_line: int
+    """Visible characters that fit on one rendered line (text width / font size)."""
+
+    capacity: float
+    """One-page ceiling in estimator units. Above this, content spills to page 2."""
+
+    target: float
+    """Budget handed to the tailor. Below `capacity`, leaving a safety margin."""
+
+    h_name: float
+    """Height of the `# Name` header line."""
+
+    h_section: float
+    """Height of a `## Section` heading, including its rule and spacing."""
+
+    h_role: float
+    """Height of a `### Role` subheading."""
+
+
+# Calibrated 2026-08-12 against the retuned 10pt preambles (see the module docstring).
+# Section/role heights fell sharply from the old template's 2.0/1.3 because the
+# retune cut \titlespacing and \parskip around headings.
+#
+# On `capacity`: this is a linear model of a nonlinear process (pagination), so the
+# boundary is a band, not a point. Measured over resume-shaped documents, `standard`
+# fit one page up to 58.7 and spilled from 62.1; `compact` fit to 62.2 and spilled
+# from 68.6. Capacity is set at the CONSERVATIVE edge of each band on purpose:
+# over-reporting pages just makes the user trim a little more, while under-reporting
+# promises "fits one page" and then hands back a two-page PDF.
+TEMPLATES: dict[str, TemplateBudget] = {
+    "standard": TemplateBudget(
+        chars_per_line=119, capacity=60.0, target=57.0,
+        h_name=2.5, h_section=1.2, h_role=1.11,
+    ),
+    "compact": TemplateBudget(
+        chars_per_line=124, capacity=64.0, target=61.0,
+        h_name=2.5, h_section=1.14, h_role=1.08,
+    ),
+}
+
+
+def budget_for(template: str | None = None) -> TemplateBudget:
+    """Density constants for `template`, falling back to the standard template."""
+    return TEMPLATES.get(template or DEFAULT_TEMPLATE, TEMPLATES[DEFAULT_TEMPLATE])
+
+
+# Back-compat module-level aliases for the default template. Prefer `budget_for`.
+PAGE_LINE_CAPACITY = TEMPLATES[DEFAULT_TEMPLATE].capacity
+ONE_PAGE_TARGET = TEMPLATES[DEFAULT_TEMPLATE].target
 
 # A trailing page holding at most this many rendered lines is "under-used" — a
 # small remainder spilling past a full page. Below the threshold we recommend
@@ -50,39 +95,41 @@ def _visible_len(line: str) -> int:
     return len(text.strip())
 
 
-def estimate_rendered_lines(markdown: str) -> float:
+def estimate_rendered_lines(markdown: str, *, template: str | None = None) -> float:
     """Estimate how many lines this markdown occupies in the rendered PDF."""
+    b = budget_for(template)
     total = 0.0
     for raw in markdown.splitlines():
         line = raw.strip()
         if not line:
             continue
         if line.startswith("# "):
-            total += _H_NAME
+            total += b.h_name
         elif line.startswith("## "):
-            total += _H_SECTION
+            total += b.h_section
         elif line.startswith("### "):
-            total += _H_ROLE
+            total += b.h_role
         else:
-            total += max(1, math.ceil(_visible_len(line) / _CHARS_PER_LINE))
+            total += max(1, math.ceil(_visible_len(line) / b.chars_per_line))
     return total
 
 
-def page_fit(markdown: str) -> dict:
+def page_fit(markdown: str, *, template: str | None = None) -> dict:
     """Page-fit summary for a resume markdown. ``fits`` is the one-page verdict;
     ``overflow_lines`` is roughly how many lines to cut when it doesn't."""
-    lines = estimate_rendered_lines(markdown)
-    est_pages = max(1, math.ceil(lines / PAGE_LINE_CAPACITY))
+    b = budget_for(template)
+    lines = estimate_rendered_lines(markdown, template=template)
+    est_pages = max(1, math.ceil(lines / b.capacity))
     return {
         "estimated_lines": round(lines, 1),
-        "capacity": PAGE_LINE_CAPACITY,
+        "capacity": b.capacity,
         "estimated_pages": est_pages,
-        "fits_one_page": lines <= PAGE_LINE_CAPACITY,
-        "overflow_lines": max(0, math.ceil(lines - ONE_PAGE_TARGET)),
+        "fits_one_page": lines <= b.capacity,
+        "overflow_lines": max(0, math.ceil(lines - b.target)),
     }
 
 
-def page_fit_target(markdown: str) -> dict:
+def page_fit_target(markdown: str, *, template: str | None = None) -> dict:
     """Recommend trimming a small remainder off an under-used trailing page.
 
     Generalizes the one-page notion to any page count: if the content spills a
@@ -94,15 +141,16 @@ def page_fit_target(markdown: str) -> dict:
     ``trim_lines`` (roughly how many lines to cut), or a no-op when the layout
     is already well-utilized.
     """
-    lines = estimate_rendered_lines(markdown)
-    current_pages = max(1, math.ceil(lines / PAGE_LINE_CAPACITY))
+    b = budget_for(template)
+    lines = estimate_rendered_lines(markdown, template=template)
+    current_pages = max(1, math.ceil(lines / b.capacity))
     # Rendered lines sitting on the last (current) page.
-    remainder = lines - (current_pages - 1) * PAGE_LINE_CAPACITY
+    remainder = lines - (current_pages - 1) * b.capacity
     under_used = current_pages >= 2 and remainder <= _TRAILING_TRIM_MAX_LINES
 
     if under_used:
         target_pages = current_pages - 1
-        target_line_budget = target_pages * ONE_PAGE_TARGET
+        target_line_budget = target_pages * b.target
         trim_lines = max(0, math.ceil(lines - target_line_budget))
     else:
         target_pages = current_pages

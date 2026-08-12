@@ -6,12 +6,11 @@ assigned client-side, so they are absent from this schema."""
 import logging
 from typing import Literal
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from src.llm import chat_model
 from src.prompts import get_prompt
-from src.utils.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -77,12 +76,7 @@ class ResumeStructurerAgent:
     PROMPT_NAME = "resume_structurer"
 
     def __init__(self, model: str | None = None):
-        self.llm = ChatAnthropic(
-            model=model or settings.anthropic_haiku_model,
-            api_key=settings.anthropic_api_key.get_secret_value(),
-            max_tokens=8192,
-            temperature=0,
-        )
+        self.llm = chat_model("fast", override=model, max_tokens=8192, temperature=0)
         self.structured_llm = self.llm.with_structured_output(ResumeDocModel)
         self.prompt = get_prompt(self.PROMPT_NAME)
 
@@ -94,15 +88,24 @@ class ResumeStructurerAgent:
         return result
 
     async def structure_from_file(self, data: bytes, media_type: str) -> ResumeDocModel:
-        """OCR path for scanned PDFs (or images): send the file to Claude's vision as a
-        document/image content block and structure it in one call — no extra dep."""
+        """OCR path for scanned PDFs (or images): send the file to the model's vision
+        as a content block and structure it in one call — no extra dep.
+
+        Uses langchain's **standard** multimodal blocks rather than a provider-native
+        shape, so this path follows whatever provider the role is pointed at. Each
+        integration translates them (langchain_anthropic turns ``file`` into its
+        ``document``/``source`` block). ``filename`` is required by OpenAI for PDFs
+        and ignored elsewhere.
+        """
         import base64
 
         b64 = base64.standard_b64encode(data).decode("ascii")  # no newlines
         if media_type == "application/pdf":
-            block: dict = {"type": "document", "source": {"type": "base64", "media_type": media_type, "data": b64}}
+            block: dict = {
+                "type": "file", "base64": b64, "mime_type": media_type, "filename": "resume.pdf",
+            }
         else:
-            block = {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}}
+            block = {"type": "image", "base64": b64, "mime_type": media_type}
         result: ResumeDocModel = await self.structured_llm.ainvoke([
             SystemMessage(content=self.prompt.text),
             HumanMessage(content=[block, {"type": "text", "text": _HUMAN_OCR_PROMPT}]),

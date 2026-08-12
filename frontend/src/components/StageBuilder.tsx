@@ -222,15 +222,25 @@ function SectionEditor({ sec, set }: { sec: Section; set: (d: ResumeDoc) => void
 
   if (sec.kind === 'text') {
     const words = (sec.text ?? '').split(/\s+/).filter(Boolean).length
+    const isSummary = sec.id === 'summary'
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
           <p style={{ ...micro, margin: 0 }}>{sec.label} paragraph</p>
-          <p style={{ ...micro, margin: 0, letterSpacing: '0.08em' }}>{words} words · aim 40–60</p>
+          <p style={{ ...micro, margin: 0, letterSpacing: '0.08em' }}>
+            {words} words · aim {isSummary ? '25–45' : '40–60'}
+          </p>
         </div>
         <textarea value={sec.text ?? ''} onChange={(e) => set(setText(dref.current, sec.id, e.target.value))}
           style={{ ...inputStyle, minHeight: 150, lineHeight: 1.6, resize: 'vertical' }} />
-        <p style={{ fontSize: 13, color: 'var(--dim)', marginTop: 9, lineHeight: 1.5 }}>Kept verbatim from your resume. The tailor step rewrites this per job — the builder never edits your words.</p>
+        {isSummary && (
+          <p style={{ fontSize: 13, color: 'var(--dim)', marginTop: 9, lineHeight: 1.5 }}>
+            Optional, and off by default. A summary costs about 5 lines, which is often
+            the difference between one page and two. Most strong one page resumes skip
+            it and lead with Skills. Switch it on in the rail if you want one.
+          </p>
+        )}
+        <p style={{ fontSize: 13, color: 'var(--dim)', marginTop: 9, lineHeight: 1.5 }}>Kept verbatim from your resume. The tailor step rewrites this per job, and only when the section is on. The builder never edits your words.</p>
       </div>
     )
   }
@@ -283,7 +293,9 @@ function PreviewPane({ doc, onTailor }: { doc: ResumeDoc; onTailor: () => void }
   const [url, setUrl] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
   const dirty = md !== renderedMd || tpl !== renderedTpl
-  const fit = estimatePageFit(md)
+  // Templates render at different densities, so the page badge has to be estimated
+  // against the one that is actually selected.
+  const fit = estimatePageFit(md, tpl)
 
   async function render() {
     if (rendering) return

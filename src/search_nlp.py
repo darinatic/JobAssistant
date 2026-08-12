@@ -5,10 +5,9 @@ Turns "find 50 remote AI Engineer jobs on JobStreet posted this week" into a
 date/experience/remote filters (MCF + JobStreet ignore them) — see search.py.
 """
 
-from langchain_anthropic import ChatAnthropic
 from pydantic import BaseModel, Field, field_validator
 
-from src.utils.config import settings
+from src.llm import chat_model
 
 _PLATFORM_ALIASES = {
     "mcf": "mycareersfuture", "my careers future": "mycareersfuture",
@@ -111,12 +110,7 @@ _llm = None
 def _get_llm():
     global _llm
     if _llm is None:
-        _llm = ChatAnthropic(
-            model=settings.anthropic_haiku_model,
-            api_key=settings.anthropic_api_key.get_secret_value(),
-            max_tokens=512,
-            temperature=0,
-        ).with_structured_output(SearchQuery)
+        _llm = chat_model("fast", max_tokens=512, temperature=0).with_structured_output(SearchQuery)
     return _llm
 
 

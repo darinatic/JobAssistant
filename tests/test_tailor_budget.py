@@ -3,9 +3,11 @@
 from src.agents.resume_tailor import _budget_rule, normalize_style
 
 
-def test_budget_rule_states_the_line_budget_and_is_rule_seven():
+def test_budget_rule_states_the_line_budget_and_is_the_length_rule():
+    # Slot 8 in the human prompt — the same slot the style latitude rules occupy,
+    # since an explicit page budget overrides the style's latitude.
     rule = _budget_rule(52.0)
-    assert rule.startswith("7. ")
+    assert rule.startswith("8. ")
     assert "52 rendered lines" in rule
 
 

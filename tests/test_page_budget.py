@@ -1,6 +1,19 @@
-"""One-page estimator — calibrated against real Tectonic renders (see page_budget)."""
+"""Page estimator — calibrated against real Tectonic renders (see page_budget).
 
-from src.utils.page_budget import estimate_rendered_lines, page_fit, page_fit_target
+The constants are per template and measured by scripts/calibrate_page_budget.py;
+these tests pin the resulting behaviour, not the raw numbers.
+"""
+
+import pytest
+
+from src.utils.page_budget import (
+    DEFAULT_TEMPLATE,
+    TEMPLATES,
+    budget_for,
+    estimate_rendered_lines,
+    page_fit,
+    page_fit_target,
+)
 
 _HEAD = "# Jane Candidate\ncontact line here\n## Summary\nShort summary line.\n## Skills\nPython, PyTorch\n## Experience\n### ML Engineer, Acme (2023-2025)\n"
 _BULLET = "- Built and shipped a production feature that improved a key metric by 30% for the platform\n"
@@ -18,23 +31,53 @@ def test_short_resume_fits_one_page():
 
 
 def test_long_resume_overflows_with_trim_estimate():
-    fit = page_fit(_resume(50))
+    fit = page_fit(_resume(60))
     assert fit["fits_one_page"] is False
     assert fit["estimated_pages"] >= 2
     assert fit["overflow_lines"] > 0
 
 
 def test_boundary_matches_calibration():
-    # Real renders: ~36 bullets = 1 page, ~37 = 2 pages (this header adds a few lines).
-    assert page_fit(_resume(30))["fits_one_page"] is True
-    assert page_fit(_resume(45))["fits_one_page"] is False
+    # Real renders of the retuned standard template: ~45 bullets = 1 page, ~50 = 2.
+    assert page_fit(_resume(45))["fits_one_page"] is True
+    assert page_fit(_resume(50))["fits_one_page"] is False
 
 
 def test_long_bullets_wrap_to_multiple_lines():
-    short = "- short bullet\n" * 5
-    long = "- " + ("word " * 60) + "\n"  # ~300 chars -> wraps to ~3-4 lines
-    assert estimate_rendered_lines(long) > estimate_rendered_lines(short) / 5 * 1  # one long > one short
-    assert estimate_rendered_lines(long) >= 3
+    long = "- " + ("word " * 60) + "\n"  # ~300 chars -> wraps to multiple lines
+    assert estimate_rendered_lines(long) >= 2
+
+
+# --- per-template density ----------------------------------------------------
+
+def test_compact_template_holds_more_than_standard():
+    md = _resume(50)
+    assert page_fit(md, template="standard")["estimated_pages"] == 2
+    assert page_fit(md, template="compact")["estimated_pages"] == 1
+
+
+def test_compact_capacity_exceeds_standard():
+    assert TEMPLATES["compact"].capacity > TEMPLATES["standard"].capacity
+    assert TEMPLATES["compact"].chars_per_line > TEMPLATES["standard"].chars_per_line
+
+
+def test_target_is_below_capacity_for_every_template():
+    # `target` is the budget handed to the tailor; it must leave a safety margin.
+    for name, b in TEMPLATES.items():
+        assert b.target < b.capacity, name
+
+
+@pytest.mark.parametrize("template", [None, "bogus", DEFAULT_TEMPLATE])
+def test_unknown_or_missing_template_falls_back_to_standard(template):
+    assert budget_for(template) is TEMPLATES[DEFAULT_TEMPLATE]
+
+
+def test_estimate_uses_the_requested_template():
+    # A wrapping line costs fewer estimator lines in the wider compact text block.
+    md = "- " + ("word " * 50) + "\n"
+    assert estimate_rendered_lines(md, template="compact") <= estimate_rendered_lines(
+        md, template="standard"
+    )
 
 
 # --- page_fit_target: "avoid an under-used trailing page" -------------------
@@ -49,29 +92,37 @@ def test_target_one_page_resume_needs_no_trim():
 
 
 def test_target_small_spill_onto_page_2_recommends_trim_to_one():
-    # ~1.05 pages: page 2 has only a few lines -> under-used, trim down to 1 page.
-    t = page_fit_target(_resume(45))
+    # ~1.005 pages: page 2 has only a few lines -> under-used, trim down to 1 page.
+    t = page_fit_target(_resume(50))
     assert t["estimated_pages"] == 2
     assert t["under_used_trailing_page"] is True
     assert t["target_pages"] == 1
     assert t["trim_lines"] > 0
-    assert t["target_line_budget"] == 50.0
+    assert t["target_line_budget"] == TEMPLATES["standard"].target
 
 
 def test_target_small_spill_onto_page_3_recommends_trim_to_two():
-    # ~2.05 pages: generalizes beyond one page — trim to the nearest full 2 pages.
-    t = page_fit_target(_resume(100))
+    # ~2.1 pages: generalizes beyond one page — trim to the nearest full 2 pages.
+    t = page_fit_target(_resume(120))
     assert t["estimated_pages"] == 3
     assert t["under_used_trailing_page"] is True
     assert t["target_pages"] == 2
-    assert t["target_line_budget"] == 100.0
+    assert t["target_line_budget"] == 2 * TEMPLATES["standard"].target
     assert t["trim_lines"] > 0
 
 
 def test_target_well_used_trailing_page_is_left_alone():
-    # ~1.7 pages: page 2 is genuinely ~2/3 full — do NOT suggest gutting it.
+    # ~1.5 pages: page 2 is genuinely half full — do NOT suggest gutting it.
     t = page_fit_target(_resume(80))
     assert t["estimated_pages"] == 2
     assert t["under_used_trailing_page"] is False
     assert t["target_pages"] == 2
     assert t["trim_lines"] == 0
+
+
+def test_target_budget_follows_the_template():
+    # The same spill trims to a bigger budget on the denser template.
+    std = page_fit_target(_resume(50), template="standard")
+    cmp_ = page_fit_target(_resume(55), template="compact")
+    assert std["target_line_budget"] == TEMPLATES["standard"].target
+    assert cmp_["target_line_budget"] == TEMPLATES["compact"].target

@@ -140,12 +140,29 @@ def test_tailor_legacy_concise_maps_to_aggressive(client):
 
 
 def test_tailor_target_pages_sets_line_budget(client):
-    # target_pages=2 -> budget = 2 * ONE_PAGE_TARGET (50) = 100 lines.
+    # target_pages=2 -> budget = 2 * the standard template's per-page line target.
+    from src.utils.page_budget import budget_for
+
     mock = AsyncMock(return_value=_tailor_result())
     with patch("src.api.services.run_full_tailoring", new=mock):
         r = client.post("/tailor", json={"jd_text": _JD, "resume_markdown": _CV, "target_pages": 2})
     assert r.status_code == 200, r.text
-    assert mock.call_args.kwargs["target_line_budget"] == 100.0
+    assert mock.call_args.kwargs["target_line_budget"] == 2 * budget_for("standard").target
+
+
+def test_tailor_line_budget_follows_the_requested_template(client):
+    # The compact template fits more per page, so the same target_pages buys a
+    # bigger line budget. Using the standard budget here would over-trim.
+    from src.utils.page_budget import budget_for
+
+    mock = AsyncMock(return_value=_tailor_result())
+    with patch("src.api.services.run_full_tailoring", new=mock):
+        r = client.post("/tailor", json={
+            "jd_text": _JD, "resume_markdown": _CV, "target_pages": 1, "template": "compact",
+        })
+    assert r.status_code == 200, r.text
+    assert mock.call_args.kwargs["target_line_budget"] == budget_for("compact").target
+    assert budget_for("compact").target > budget_for("standard").target
 
 
 def test_tailor_without_target_pages_has_no_budget(client):

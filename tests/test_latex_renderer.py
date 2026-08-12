@@ -176,9 +176,23 @@ def test_compact_template_uses_a_denser_preamble():
     compact = markdown_to_latex(md, template="compact")
     # Both render the same body...
     assert "Jane Doe" in standard and "Jane Doe" in compact
-    # ...but the compact preamble is denser: smaller font + tighter margins.
-    assert "11pt" in standard and "10pt" in compact
-    assert "margin=0.6in" in standard and "margin=0.45in" in compact
+    # ...but the compact preamble is denser. Both run a 10pt body (11pt was measured
+    # and cannot hold a full resume on one page); compact buys its extra density from
+    # narrower margins, tighter leading and less space around headings.
+    assert "10pt" in standard and "10pt" in compact
+    assert "margin=0.5in" in standard and "margin=0.4in" in compact
+    assert r"\linespread{0.97}" in compact and r"\linespread" not in standard
+
+
+def test_both_templates_pin_parskip_low():
+    # parskip defaults to 0.5\baselineskip and fires on every heading line and
+    # paragraph — the single biggest space cost in this renderer. Leaving it at the
+    # default silently costs about a full page on a real resume.
+    md = "# Jane Doe\n\n## Skills\n\nPython, RAG\n"
+    for template in ("standard", "compact"):
+        tex = markdown_to_latex(md, template=template)
+        assert r"\usepackage{parskip}" in tex
+        assert r"\setlength{\parskip}{" in tex, template
 
 
 def test_unknown_template_falls_back_to_standard():

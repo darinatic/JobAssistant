@@ -1,22 +1,17 @@
 """Cover letter generation agent."""
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.schemas import CoverLetter, ParsedJobDescription, SkillMatch, TailoredResume
+from src.llm import chat_model
 from src.prompts import get_prompt
-from src.utils.config import settings
 
 
 class CoverLetterAgent:
     PROMPT_NAME = "cover_letter"
 
     def __init__(self, model: str | None = None):
-        self.llm = ChatAnthropic(
-            model=model or settings.anthropic_sonnet_model,
-            api_key=settings.anthropic_api_key.get_secret_value(),
-            max_tokens=2048,
-        )
+        self.llm = chat_model("smart", override=model, max_tokens=2048)
         self.structured_llm = self.llm.with_structured_output(CoverLetter)
         self.prompt = get_prompt(self.PROMPT_NAME)
 

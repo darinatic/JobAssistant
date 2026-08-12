@@ -21,14 +21,42 @@ class Settings(BaseSettings):
 
     # Model IDs (env-overridable, e.g. ANTHROPIC_HAIKU_MODEL=...). Haiku parses
     # the JD (cheap); Sonnet tailors + writes the cover letter (quality).
+    # These remain the Anthropic-specific defaults that feed the role settings below.
     anthropic_haiku_model: str = "claude-haiku-4-5-20251001"
     anthropic_sonnet_model: str = "claude-sonnet-4-5-20250929"
 
-    # OpenAI: embeddings + the (dev-only) eval LLM-judge. Everything the app SERVES
-    # stays on Anthropic / Claude; the judge is deliberately a different provider to
-    # avoid a model grading its own family's output.
+    # --- provider-agnostic model roles ---------------------------------------
+    # The app selects models by ROLE, not by name: the prompts are tuned to a
+    # capability tier, not to a vendor. Each is a "provider:model" string resolved
+    # through langchain's init_chat_model (see src/llm.py), so switching provider is
+    # an env change: LLM_SMART_MODEL=openai:gpt-4o.
+    #
+    # Blank means "derive from the anthropic_* fields above", which keeps every
+    # existing deployment working untouched (prod sets ANTHROPIC_*_MODEL).
+    llm_fast_model: str = ""    # JD parse, resume structuring, NL search query
+    llm_smart_model: str = ""   # resume tailoring, cover letter
+    # Optional: a second model tried when the primary errors (e.g. an Anthropic 529
+    # overload). Same "provider:model" form. Blank = no fallback, failures surface.
+    llm_fallback_model: str = ""
+
+    # OpenAI: embeddings + the (dev-only) eval LLM-judge, and available as an app
+    # provider via LLM_*_MODEL=openai:... The judge is deliberately a different
+    # provider to avoid a model grading its own family's output.
     openai_api_key: SecretStr | None = None
     openai_judge_model: str = "gpt-4o-mini"
+
+    # Google Gemini — only needed when an LLM_*_MODEL points at google_genai:...
+    google_api_key: SecretStr | None = None
+
+    @property
+    def fast_model(self) -> str:
+        """Effective 'provider:model' for the cheap/structural role."""
+        return self.llm_fast_model or f"anthropic:{self.anthropic_haiku_model}"
+
+    @property
+    def smart_model(self) -> str:
+        """Effective 'provider:model' for the quality/writing role."""
+        return self.llm_smart_model or f"anthropic:{self.anthropic_sonnet_model}"
 
     linkedin_search_keyword: str = "AI Engineer"
     linkedin_search_location: str = "Singapore"

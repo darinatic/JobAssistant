@@ -55,6 +55,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Extra chat-model providers. The app selects models by role through src/llm.py
+# ("provider:model" strings), and langchain-anthropic in the core deps covers the
+# default. Install this extra only to point LLM_FAST_MODEL / LLM_SMART_MODEL at
+# another vendor — the Docker image deliberately does NOT include it, so the
+# deployed image stays lean.
+providers = [
+    "langchain-openai>=1.1.0,<2.0.0",
+    "langchain-google-genai>=3.1.0,<4.0.0",
+]
+
 dev = [
     # Testing
     "pytest>=9.0.3",

@@ -390,10 +390,14 @@ export function blankDoc(): ResumeDoc {
           { label: 'Portfolio', value: '' },
         ],
       },
-      { id: 'summary', label: 'Summary', kind: 'text', on: true, text: '' },
+      // Summary is off by default: it costs ~5 rendered lines (measured as the
+      // difference between one page and two on a full resume) and most strong
+      // one-page resumes lead straight into Skills. Still switchable per doc, and a
+      // summary found in an imported CV is always kept.
+      { id: 'summary', label: 'Summary', kind: 'text', on: false, text: '' },
+      { id: 'skills', label: 'Skills', kind: 'chips', on: true, chips: [] },
       { id: 'experience', label: 'Experience', kind: 'blocks', on: true, blocks: [] },
       { id: 'education', label: 'Education', kind: 'blocks', on: true, blocks: [] },
-      { id: 'skills', label: 'Skills', kind: 'chips', on: true, chips: [] },
       { id: 'projects', label: 'Projects', kind: 'blocks', on: true, blocks: [] },
     ],
   }

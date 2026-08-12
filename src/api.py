@@ -180,6 +180,9 @@ class TailorRequest(BaseModel):
     # "Fit to page": when set, re-tailor with a hard rendered-line budget so a small
     # remainder doesn't waste an under-used trailing page. See page_budget.py.
     target_pages: int | None = Field(default=None, ge=1, le=5)
+    # Which LaTeX template the result will be rendered with. Templates differ in
+    # density, so the line budget behind `target_pages` is per-template.
+    template: Literal["standard", "compact"] = "standard"
 
     @property
     def effective_style(self) -> str:
@@ -453,9 +456,11 @@ async def tailor(req: TailorRequest) -> TailorResponse:
     """Full tailoring pipeline. Re-running with a different style re-tailors from
     the master CV (there is no feedback/refine loop — users edit the markdown or
     pick a more aggressive style)."""
-    # "Fit to page": budget = target_pages × the per-page safety-margin line target.
-    from src.utils.page_budget import ONE_PAGE_TARGET
-    target_line_budget = req.target_pages * ONE_PAGE_TARGET if req.target_pages else None
+    # "Fit to page": budget = target_pages × the per-page safety-margin line target
+    # of the template this will actually be rendered with (densities differ).
+    from src.utils.page_budget import budget_for
+    page_target = budget_for(req.template).target
+    target_line_budget = req.target_pages * page_target if req.target_pages else None
     result = await services.run_full_tailoring(
         req.jd_text, master_cv=req.resume_markdown,
         style=req.effective_style, include_cover_letter=req.include_cover_letter,
