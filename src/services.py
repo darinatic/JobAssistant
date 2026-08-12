@@ -4,6 +4,8 @@ Stateless — nothing here touches a database or an auth session. The FastAPI
 layer passes the candidate's CV in per request.
 """
 
+import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from src.agents import (
@@ -20,6 +22,7 @@ from src.agents.schemas import (
 from src.graph import process_job
 from src.graph.state import ApplicationState
 from src.guardrails import GuardrailReport, anonymize, restore, summary_report
+from src.guardrails.output import StreamingRestorer, restore_and_verify
 from src.matching import match_local
 from src.utils.config import settings
 
@@ -134,6 +137,79 @@ async def run_full_tailoring(
         target_line_budget=target_line_budget,
     )
     return TailoringResult.from_state(state)
+
+
+_FENCE_RE = re.compile(r"^\s*```[a-zA-Z]*\n|\n```\s*$")
+
+
+def _clean_streamed_resume(text: str) -> str:
+    """Trim what a non-schema'd model sometimes wraps around the markdown.
+
+    The streaming path has no schema to enforce shape, so rule #9 asks for bare
+    markdown — but a stray code fence or a leading blank line is cheap to forgive
+    here rather than re-prompt. Anything before the first ``# `` heading is dropped,
+    which also removes a "Here is the tailored resume:" preamble.
+    """
+    text = _FENCE_RE.sub("", text.strip())
+    idx = text.find("# ")
+    if idx > 0 and not text[:idx].strip().startswith("#"):
+        text = text[idx:]
+    return text.strip()
+
+
+async def stream_tailoring(
+    jd_text: str,
+    *,
+    master_cv: str,
+    style: str = "faithful",
+    target_line_budget: float | None = None,
+) -> AsyncIterator[dict]:
+    """Tailor with the resume streamed back as it is written.
+
+    Yields dicts: ``{"type": "match", ...}`` once the deterministic match is known
+    (so the UI can paint the skill rail before any text arrives), then
+    ``{"type": "delta", "text": ...}`` per chunk, then a final ``{"type": "done"}``
+    carrying the authoritative resume plus the guardrail report.
+
+    Deliberately not routed through the LangGraph workflow: the graph's value is
+    orchestrating parse → match → tailor → cover-letter as discrete completed steps,
+    which is the opposite of streaming one of them. The cover letter is a separate
+    endpoint anyway. Parse and match are reused verbatim from this module.
+
+    **The deltas are for display only.** The ``done`` payload is the source of truth:
+    it is the fully accumulated text put through ``restore_and_verify``, which runs
+    the identifier round-trip check and the contact-header safety net.
+    """
+    parsed = await parse_jd(jd_text)
+    match = await score_jd(parsed, master_cv=master_cv)
+    yield {"type": "match", "data": match.model_dump(), "parsed_jd": parsed.model_dump()}
+
+    # PII guardrail: the model sees an anonymized CV. Identifiers are restored per
+    # chunk so the user never sees a <NAME_0> token in their own resume.
+    redaction = anonymize(master_cv)
+    restorer = StreamingRestorer(redaction)
+    raw: list[str] = []
+
+    async for chunk in _get_resume_tailor().stream_tailor(
+        parsed, match, master_cv=redaction.text, style=style,
+        target_line_budget=target_line_budget,
+    ):
+        raw.append(chunk)
+        visible = restorer.push(chunk)
+        if visible:
+            yield {"type": "delta", "text": visible}
+    tail = restorer.flush()
+    if tail:
+        yield {"type": "delta", "text": tail}
+
+    restored, report = restore_and_verify(
+        _clean_streamed_resume("".join(raw)), redaction, original_cv=master_cv
+    )
+    yield {
+        "type": "done",
+        "tailored_resume_markdown": restored,
+        "guardrails": report.model_dump(),
+    }
 
 
 async def cover_letter_for(

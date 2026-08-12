@@ -32,6 +32,47 @@ def _replace_header(markdown: str, new_header: str) -> str | None:
     return "\n".join([new_header, ""] + lines[idx:])
 
 
+class StreamingRestorer:
+    """Restore identifiers incrementally as tailored markdown streams in.
+
+    Streaming the model's raw output would show the user ``<NAME_0>`` in their own
+    resume, so tokens have to be swapped back before each chunk is released. The
+    catch is that a token can straddle a chunk boundary (``"...<NAM"`` + ``"E_0>..."``),
+    and a naive per-chunk ``restore`` would emit the two halves untouched.
+
+    So the tail is held back whenever it contains an unterminated ``<``: that is the
+    only way a placeholder can be half-arrived. The hold is capped at
+    ``_MAX_HOLD`` characters, because ordinary prose can contain a ``<`` that never
+    closes and the stream must not stall waiting for a ``>`` that never comes.
+
+    This is a *display* guard. The authoritative resume is still the fully
+    accumulated text put through :func:`restore_and_verify` at the end of the
+    stream, which is what runs the round-trip check and the header safety net.
+    """
+
+    # Longest real token is like "<PHONE_10>"; 32 gives ample headroom.
+    _MAX_HOLD = 32
+
+    def __init__(self, redaction: Redaction) -> None:
+        self._redaction = redaction
+        self._buf = ""
+
+    def push(self, chunk: str) -> str:
+        """Feed a raw chunk, get back the safe-to-display restored text."""
+        self._buf += chunk
+        cut = len(self._buf)
+        start = self._buf.rfind("<")
+        if start != -1 and ">" not in self._buf[start:] and len(self._buf) - start <= self._MAX_HOLD:
+            cut = start  # a placeholder may be mid-arrival — hold from the '<'
+        out, self._buf = self._buf[:cut], self._buf[cut:]
+        return restore(out, self._redaction)
+
+    def flush(self) -> str:
+        """Release whatever is still held (end of stream)."""
+        out, self._buf = self._buf, ""
+        return restore(out, self._redaction)
+
+
 def summary_report(redaction: Redaction) -> GuardrailReport:
     """A redaction-summary-only report (no resume header to force-restore), for the
     cover-letter path where the output is free prose rather than a structured resume."""
@@ -60,11 +101,22 @@ def restore_and_verify(
 
     leaks: list[str] = []
     header_forced = False
+
+    # The contact header is COPIED, never authored — the tailor has no legitimate
+    # reason to rewrite a name, email, phone or profile link. Rebuilding it from the
+    # CV unconditionally also closes a failure mode nothing else catches: the tailor
+    # prompt asks for links shaped like "linkedin.com/in/x", so the model sometimes
+    # wraps an opaque <URL_0> placeholder in that prefix, and restoring then yields
+    # "linkedin.com/in/linkedin.com/in/user". The token round-trips, so the check
+    # below still passes while the user's actual URL is broken in the PDF.
+    rebuilt = _replace_header(restored, _header_block(original_cv))
+    if rebuilt is not None:
+        restored = rebuilt
+
     if missing or residual:
-        forced = _replace_header(restored, _header_block(original_cv))
-        if forced is not None:
-            restored = forced
-            header_forced = True
+        # `header_forced` stays reserved for "we had to intervene because an
+        # identifier did not round-trip", which is what the UI surfaces.
+        header_forced = rebuilt is not None
         for ph in sorted(missing, key=len, reverse=True):
             leaks.append(f"identifier not echoed by the model: {reverse[ph]!r}")
         for token in sorted(residual):

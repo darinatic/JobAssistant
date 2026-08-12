@@ -233,7 +233,58 @@ export const api = {
     style?: 'faithful' | 'aggressive'
     include_cover_letter?: boolean
     target_pages?: number
+    template?: 'standard' | 'compact'
   }) => postJson<TailorResult>('/tailor', body),
+
+  /**
+   * Streaming tailor. `onMatch` fires once the deterministic match is known (before
+   * any text), `onDelta` per chunk as the resume is written, `onDone` last.
+   *
+   * `onDone` carries the AUTHORITATIVE resume and must replace whatever the deltas
+   * accumulated: the server's PII guard can force-restore the contact header at the
+   * end, which is content that never streamed.
+   */
+  tailorStream: async (
+    body: {
+      jd_text: string
+      resume_markdown: string
+      style?: 'faithful' | 'aggressive'
+      target_pages?: number
+      template?: 'standard' | 'compact'
+    },
+    h: {
+      onMatch?: (m: Match) => void
+      onDelta: (text: string) => void
+      onDone: (r: { tailored_resume_markdown: string; match: Match; honesty: TailorResult['honesty']; guardrails: TailorResult['guardrails'] }) => void
+    },
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    const res = await fetch(`${API_URL}/tailor/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    })
+    if (!res.ok || !res.body) throw new ApiError(res.status, `Tailoring failed (${res.status})`)
+    const reader = res.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        const msg = JSON.parse(line)
+        if (msg.type === 'delta') h.onDelta(msg.text)
+        else if (msg.type === 'match') h.onMatch?.(msg.data)
+        else if (msg.type === 'done') h.onDone(msg)
+        else if (msg.type === 'error') throw new ApiError(500, msg.detail || 'Tailoring failed')
+      }
+    }
+  },
 
   coverLetter: (body: { jd_text: string; resume_markdown: string }) =>
     postJson<{ cover_letter_text: string; word_count: number }>('/cover-letter', body),

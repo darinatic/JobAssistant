@@ -1,6 +1,7 @@
 """Resume tailoring agent."""
 
 import re
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 
@@ -103,6 +104,39 @@ class ResumeTailorAgent:
         ]
         return await self.structured_llm.ainvoke(messages)
 
+    async def stream_tailor(
+        self,
+        parsed_jd: ParsedJobDescription,
+        skill_match: SkillMatch,
+        *,
+        master_cv: str | None = None,
+        style: str = "faithful",
+        target_line_budget: float | None = None,
+    ) -> AsyncIterator[str]:
+        """Yield the tailored resume markdown in chunks as the model writes it.
+
+        Unlike :meth:`tailor` this deliberately does NOT use ``with_structured_output``
+        — a schema can only be delivered once it is complete, which is the opposite of
+        streaming. The structured extras (``changes_made``/``keywords_added``) are not
+        rendered anywhere in the UI, so nothing is lost; the caller accumulates the
+        text and validates it at the end.
+        """
+        messages = [
+            SystemMessage(content=self.prompt.text),
+            HumanMessage(content=self._build_tailor_prompt(
+                parsed_jd, skill_match, master_cv=master_cv, style=style,
+                target_line_budget=target_line_budget, stream=True,
+            )),
+        ]
+        async for chunk in self.llm.astream(messages):
+            # `.text` is a property in langchain 1.x (calling it emits a deprecation
+            # warning); fall back to `.content` for any integration that lacks it.
+            text = getattr(chunk, "text", None)
+            if not isinstance(text, str):
+                text = str(chunk.content) if chunk.content else ""
+            if text:
+                yield text
+
     def tailor_sync(
         self,
         parsed_jd: ParsedJobDescription,
@@ -122,6 +156,7 @@ class ResumeTailorAgent:
         master_cv: str | None = None,
         style: str = "faithful",
         target_line_budget: float | None = None,
+        stream: bool = False,
     ) -> str:
         cv = master_cv if master_cv is not None else self.master_cv
         # An explicit page-fit budget overrides the style's latitude rule.
@@ -196,7 +231,22 @@ class ResumeTailorAgent:
    thing for THIS role; no buzzword stacking and none of the machine-written filler
    ("results-driven", "proven track record", "passionate about").
 {length_rule}
-9. Output the complete markdown resume, then list changes made and keywords incorporated."""
+{self._output_rule(stream)}"""
+
+    @staticmethod
+    def _output_rule(stream: bool) -> str:
+        """Rule #9. When streaming there is no schema to carry the change log, so the
+        model must emit the resume and nothing else — this explicitly overrides the
+        system prompt's closing "also list what changes you made" instruction, which
+        would otherwise be appended straight into the user's resume."""
+        if not stream:
+            return "9. Output the complete markdown resume, then list changes made and keywords incorporated."
+        return (
+            "9. **Output ONLY the complete markdown resume.** No preamble, no closing "
+            "commentary, no code fences, and NO list of changes or keywords — ignore "
+            "any earlier instruction to list them. The response must start with the "
+            "`# ` name line and end with the resume's last bullet."
+        )
 
     def _format_list(self, items: list[str]) -> str:
         if not items:

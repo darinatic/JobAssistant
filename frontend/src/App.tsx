@@ -249,6 +249,10 @@ function Home() {
   const [floor, setFloor] = useState(false)
   const searchAbort = useRef<AbortController | null>(null)
   const enrichAbort = useRef<AbortController | null>(null)
+  // Tailoring streams for ~35s. Without this, opening another job and re-tailoring
+  // leaves the first stream running: both write the resume box, and the abandoned
+  // one throws on navigation and toasts an error over a perfectly good draft.
+  const tailorAbort = useRef<AbortController | null>(null)
 
   const [mode, setMode] = useState<'search' | 'paste'>('search')
   const [jd, setJd] = useState('')
@@ -269,13 +273,10 @@ function Home() {
   const [fitting, setFitting] = useState(false)
   const [stage, setStage] = useState('')
 
+  // Stage is driven by real stream events (see runTailor) — it used to be a timer
+  // guessing at progress. Clearing it here keeps the rail tidy when tailoring ends.
   useEffect(() => {
-    if (!tailoring) { setStage(''); return }
-    const stages = ['reading the posting', 'matching against your cv', 'drafting · streaming', 'honesty lint · checking every claim']
-    let i = 0
-    setStage(stages[0])
-    const id = setInterval(() => { i = Math.min(i + 1, stages.length - 1); setStage(stages[i]) }, 3500)
-    return () => clearInterval(id)
+    if (!tailoring) setStage('')
   }, [tailoring])
 
   // Legitimacy red-flags, deterministic, advisory, auto-fetched whenever a job opens.
@@ -335,7 +336,14 @@ function Home() {
     finally { if (enrichAbort.current === ac) { enrichAbort.current = null; setPending(new Set()) } }
   }
 
-  function resetResult() { setResult(null); setEditedResume(''); setCoverLetter(null) }
+  function resetResult() {
+    // Kill any in-flight tailor first: opening a different job while one is streaming
+    // would otherwise keep writing the old job's resume into the new job's box.
+    tailorAbort.current?.abort()
+    tailorAbort.current = null
+    setTailoring(false); setFitting(false); setStage('')
+    setResult(null); setEditedResume(''); setCoverLetter(null)
+  }
 
   function clearResults() {
     setJobs([]); setInsights(null); setPending(new Set()); setInterpreted(null)
@@ -457,28 +465,84 @@ function Home() {
   async function runTailor(jdText: string) {
     if (!hasCv) return toast.error('Upload your resume first.')
     if (jdText.trim().length < 20) return toast.error('This posting has no description to tailor against.')
+    tailorAbort.current?.abort()
+    const ac = new AbortController()
+    tailorAbort.current = ac
     setTailoring(true)
+    setStage('reading the posting')
+    setResult(null)
+    setEditedResume('')
+    setCoverLetter(null)
+    const previous = editedResume
+    let acc = ''
     try {
-      const res = await api.tailor({ jd_text: jdText, resume_markdown: cvResume, style })
-      setResult(res)
-      setEditedResume(applySkillAdditions(res.tailored_resume_markdown ?? '', res.match))
-      setCoverLetter(null)
-    } catch (e) { toast.error(err(e)) } finally { setTailoring(false) }
+      await api.tailorStream({ jd_text: jdText, resume_markdown: cvResume, style }, {
+        onMatch: (match) => {
+          if (ac.signal.aborted) return
+          setStage('drafting · streaming')
+          // Paint the score and skill rail before any text arrives. Advisory panels
+          // that depend on the finished draft (honesty, guardrails) stay empty until
+          // `done` — see the honesty stamp's `!tailoring` guard.
+          setResult({
+            tailored_resume_markdown: null, cover_letter_text: null, cover_letter_word_count: null,
+            match, changes_made: [], keywords_added: [], status: 'tailoring', errors: [],
+          })
+        },
+        onDelta: (text) => { if (ac.signal.aborted) return; acc += text; setEditedResume(acc) },
+        onDone: (d) => {
+          if (ac.signal.aborted) return
+          setStage('honesty lint · checking every claim')
+          setResult({
+            tailored_resume_markdown: d.tailored_resume_markdown, cover_letter_text: null,
+            cover_letter_word_count: null, match: d.match, changes_made: [], keywords_added: [],
+            status: 'completed', errors: [], honesty: d.honesty, guardrails: d.guardrails,
+          })
+          // Adopt the server's authoritative text, not the accumulated deltas: the PII
+          // guard can force-restore the contact header at the end of the stream.
+          setEditedResume(applySkillAdditions(d.tailored_resume_markdown, d.match))
+        },
+      }, ac.signal)
+    } catch (e) {
+      if (ac.signal.aborted) return  // superseded by a newer tailor — not an error
+      setEditedResume(previous)  // a failed re-tailor must not discard the existing draft
+      toast.error(err(e))
+    } finally { if (tailorAbort.current === ac) { tailorAbort.current = null; setTailoring(false) } }
   }
 
   async function onFitToPage() {
     if (!activeJob || !editedResume.trim()) return
     const t = estimatePageTarget(editedResume)
     if (!t.underUsedTrailingPage) return
+    tailorAbort.current?.abort()
+    const ac = new AbortController()
+    tailorAbort.current = ac
     setFitting(true)
+    setCoverLetter(null)
+    const previous = editedResume
+    let acc = ''
     try {
-      const res = await api.tailor({
-        jd_text: activeJob.jd, resume_markdown: editedResume, style, target_pages: t.targetPages,
-      })
-      setResult(res)
-      setEditedResume(applySkillAdditions(res.tailored_resume_markdown ?? editedResume, res.match))
-      setCoverLetter(null)
-    } catch (e) { toast.error(err(e)) } finally { setFitting(false) }
+      await api.tailorStream(
+        { jd_text: activeJob.jd, resume_markdown: previous, style, target_pages: t.targetPages },
+        {
+          onDelta: (text) => { if (ac.signal.aborted) return; acc += text; setEditedResume(acc) },
+          onDone: (d) => {
+            if (ac.signal.aborted) return
+            setResult((r) => ({
+              tailored_resume_markdown: d.tailored_resume_markdown, cover_letter_text: null,
+              cover_letter_word_count: null, match: d.match, changes_made: [], keywords_added: [],
+              status: 'completed', errors: [], honesty: d.honesty,
+              guardrails: d.guardrails ?? r?.guardrails ?? null,
+            }))
+            setEditedResume(applySkillAdditions(d.tailored_resume_markdown, d.match))
+          },
+        },
+        ac.signal,
+      )
+    } catch (e) {
+      if (ac.signal.aborted) return  // superseded — not an error
+      setEditedResume(previous)  // a failed refit must not leave a half-streamed draft
+      toast.error(err(e))
+    } finally { if (tailorAbort.current === ac) { tailorAbort.current = null; setFitting(false) } }
   }
 
   async function onGenerateCl() {
@@ -888,11 +952,15 @@ function ReadoutRail({ insights, analyzing, scoreColor, className }: { insights:
 // ---- stage 03 tailor -------------------------------------------------------
 
 function Pipeline({ tailoring, result, downloading }: { tailoring: boolean; result: TailorResult | null; downloading: string | null }) {
-  const done = !!result
+  // Real stream stages, not a guess: `result` appears when the match event lands,
+  // and only flips to 'completed' on `done`. Lighting the tailor/lint dots off
+  // `!!result` would have claimed both were finished the moment matching ended.
+  const matched = !!result
+  const done = result?.status === 'completed'
   const rows: [string, string, string][] = [
-    ['parse jd', 'haiku 4.5', tailoring || done ? 'var(--have)' : 'var(--hair)'],
-    ['match skills', 'local · 1ms', tailoring || done ? 'var(--have)' : 'var(--hair)'],
-    ['tailor', 'sonnet 4.5', done ? 'var(--have)' : tailoring ? 'var(--ink)' : 'var(--hair)'],
+    ['parse jd', 'haiku 4.5', tailoring || matched ? 'var(--have)' : 'var(--hair)'],
+    ['match skills', 'local · 1ms', matched ? 'var(--have)' : tailoring ? 'var(--ink)' : 'var(--hair)'],
+    ['tailor', 'sonnet 4.5', done ? 'var(--have)' : tailoring && matched ? 'var(--ink)' : 'var(--hair)'],
     ['honesty lint', 'deterministic', done ? 'var(--have)' : 'var(--hair)'],
     ['render pdf', 'tectonic', downloading === 'resume' ? 'var(--ink)' : 'var(--hair)'],
   ]
@@ -992,7 +1060,10 @@ function StageTailor(p: TailorProps) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '16px 18px', background: 'var(--ink)', flexWrap: 'wrap' }}>
                 <span className="ov-num" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 30, color: 'var(--paper)' }}>{m.overall_score}<span style={{ fontSize: 14, opacity: 0.6 }}>/100</span></span>
                 <span style={{ flex: 1, minWidth: 200, fontSize: 14, lineHeight: 1.5, color: 'var(--paper)' }}>{m.reasoning}</span>
-                {(result.honesty ?? []).length === 0 && <span className="ov-stamp ov-stamp-have">honesty ✓</span>}
+                {/* Only claim a clean lint once it has actually run — during streaming
+                    `honesty` is simply not populated yet, which is not the same thing. */}
+                {!p.tailoring && result.status === 'completed' && (result.honesty ?? []).length === 0
+                  && <span className="ov-stamp ov-stamp-have">honesty ✓</span>}
               </div>
 
               {/* honesty split */}

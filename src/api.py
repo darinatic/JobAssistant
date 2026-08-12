@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src import search as job_search
 from src import services
 from src.agents.resume_structurer import ResumeDocModel, ResumeStructurerAgent
-from src.agents.schemas import SkillMatch
+from src.agents.schemas import ParsedJobDescription, SkillMatch
 from src.guardrails import GuardrailReport
 from src.logging_setup import configure_logging
 from src.matching import extract_skills, gap_analysis, lint_resume
@@ -493,6 +493,76 @@ async def tailor(req: TailorRequest) -> TailorResponse:
         honesty=honesty,
         guardrails=result.guardrail_report,
     )
+
+
+@app.post("/tailor/stream")
+async def tailor_stream(req: TailorRequest) -> StreamingResponse:
+    """Same pipeline as `/tailor`, streamed as NDJSON so the resume paints as it is
+    written: a `match` line once the deterministic match is known, a `delta` line per
+    chunk, then `done` with the authoritative resume + advisory panels.
+
+    The deltas are for display only — `done` carries the verified text (identifiers
+    round-tripped, contact header safety-netted), so the client should adopt that as
+    its final state rather than the concatenated deltas.
+    """
+    import json
+
+    from src.utils.page_budget import budget_for
+
+    page_target = budget_for(req.template).target
+    target_line_budget = req.target_pages * page_target if req.target_pages else None
+
+    async def gen():
+        tailored_md = ""
+        match_out: MatchOut | None = None
+        guardrails: dict | None = None
+        try:
+            async for msg in services.stream_tailoring(
+                req.jd_text, master_cv=req.resume_markdown,
+                style=req.effective_style, target_line_budget=target_line_budget,
+            ):
+                if msg["type"] == "match":
+                    # Build the SAME enriched MatchOut the `done` event carries. A raw
+                    # SkillMatch has no surfaceable_skills/genuine_gaps/keyword_* , and
+                    # the client renders those immediately — emitting the bare model
+                    # crashed the tailor stage on `undefined.length`. One shape, both
+                    # events. Reuses the stream's own parse/match, so no extra LLM call;
+                    # the gap split and keyword coverage are deterministic (~1ms).
+                    parsed = ParsedJobDescription.model_validate(msg["parsed_jd"])
+                    skill_match = SkillMatch.model_validate(msg["data"])
+                    gaps = gap_analysis(parsed, req.resume_markdown)
+                    have, missing = _keyword_coverage(req.jd_text, req.resume_markdown)
+                    match_out = _match_out(
+                        skill_match, surfaceable=gaps.surfaceable_skills,
+                        genuine=gaps.genuine_gaps, keyword_have=have, keyword_missing=missing,
+                    )
+                    yield json.dumps({"type": "match", "data": match_out.model_dump()}) + "\n"
+                    continue
+                if msg["type"] == "done":
+                    tailored_md = msg["tailored_resume_markdown"]
+                    guardrails = msg["guardrails"]
+                    continue  # re-emitted below with the honesty lint
+                yield json.dumps(msg) + "\n"
+        except Exception as e:  # noqa: BLE001 — a stream can't raise an HTTP status midway
+            log.warning("Streaming tailor failed: %s", e)
+            yield json.dumps({"type": "error", "detail": str(e)}) + "\n"
+            return
+
+        if match_out is None:
+            yield json.dumps({"type": "error", "detail": "Couldn't process this job description."}) + "\n"
+            return
+
+        # The honesty lint can only run once the draft is complete.
+        honesty = lint_resume(req.resume_markdown, tailored_md).as_dicts() if tailored_md else []
+        yield json.dumps({
+            "type": "done",
+            "tailored_resume_markdown": tailored_md,
+            "match": match_out.model_dump(),
+            "honesty": honesty,
+            "guardrails": guardrails,
+        }) + "\n"
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
 @app.post("/cover-letter", response_model=CoverLetterResponse)

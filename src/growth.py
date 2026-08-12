@@ -61,5 +61,11 @@ async def record_candidates(candidates: list[str], title: str | None) -> None:
                 json={"p_candidates": candidates, "p_title": title},
             )
             resp.raise_for_status()
+    except httpx.RequestError as e:
+        # Supabase unreachable: paused free-tier project, offline dev box, DNS. This is
+        # best-effort telemetry on a fail-open path, so a full traceback here reads like
+        # a broken request and buries the real logs — one line is enough.
+        log.warning("growth-candidate persistence unavailable (%s): %s", type(e).__name__, e)
     except Exception:  # noqa: BLE001 — best-effort telemetry, must not break tailoring
+        # Anything else (auth, bad RPC, 4xx/5xx) is a real misconfiguration worth tracing.
         log.warning("growth-candidate persistence failed", exc_info=True)
