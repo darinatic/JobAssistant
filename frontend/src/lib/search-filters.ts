@@ -19,6 +19,7 @@ export const PLATFORM_OPTIONS = [
   { value: 'mycareersfuture', label: 'MyCareersFuture' },
   { value: 'linkedin', label: 'LinkedIn' },
   { value: 'jobstreet', label: 'JobStreet' },
+  { value: 'careersgov', label: 'Careers@Gov' },
 ]
 export const REMOTE_OPTIONS = [
   { value: 'on_site', label: 'On-site' },

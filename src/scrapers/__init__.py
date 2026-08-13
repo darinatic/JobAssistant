@@ -1,6 +1,7 @@
 """Job scrapers — one module per platform, all conform to JobScraper."""
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.careersgov import CareersGovScraper
 from src.scrapers.jobstreet import JobStreetScraper
 from src.scrapers.linkedin import LinkedInGuestScraper
 from src.scrapers.mycareersfuture import MyCareersFutureScraper
@@ -10,6 +11,7 @@ __all__ = [
     "JobScraper",
     "SearchParams",
     "MyCareersFutureScraper",
+    "CareersGovScraper",
     "LinkedInGuestScraper",
     "JobStreetScraper",
 ]
@@ -24,4 +26,6 @@ def build_scraper(platform: str) -> JobScraper:
         return LinkedInGuestScraper()
     if p == "jobstreet":
         return JobStreetScraper()
+    if p in ("careersgov", "careers@gov", "careersatgov", "gov"):
+        return CareersGovScraper()
     raise ValueError(f"Unknown platform: {platform}")

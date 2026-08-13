@@ -128,10 +128,33 @@ _LINKEDIN_LEVELS = {
     "executive": "executive",
 }
 
+# Careers@Gov states years-of-experience bands rather than a seniority label. A
+# posting often lists SEVERAL bands, so the caller passes the LOWEST one — the least
+# experience the role will accept, which is what a candidate filters on.
+_CAREERSGOV_LEVELS = {
+    "0 - 1 year": "entry_level",
+    "1 - 3 years": "associate",
+    "4 - 6 years": "mid_senior",
+    "7 - 9 years": "mid_senior",
+    "> 10 years": "director",
+}
+
 _LEVEL_TABLES = {
     "mycareersfuture": _MCF_LEVELS,
     "linkedin": _LINKEDIN_LEVELS,
+    "careersgov": _CAREERSGOV_LEVELS,
 }
+
+# Ascending order of the Careers@Gov bands, for picking the lowest of a set.
+CAREERSGOV_BAND_ORDER = ("0 - 1 year", "1 - 3 years", "4 - 6 years", "7 - 9 years", "> 10 years")
+
+
+def lowest_careersgov_band(levels: list[str]) -> str | None:
+    """The least-experience band in a Careers@Gov posting's list, or None."""
+    known = [lv for lv in levels if lv in CAREERSGOV_BAND_ORDER]
+    if not known:
+        return None
+    return min(known, key=CAREERSGOV_BAND_ORDER.index)
 
 
 def normalize_experience(raw: str | None, platform: str) -> str | None:

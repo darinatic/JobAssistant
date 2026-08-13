@@ -14,6 +14,9 @@ _PLATFORM_ALIASES = {
     "mycareersfuture": "mycareersfuture", "careersfuture": "mycareersfuture",
     "linkedin": "linkedin", "linked in": "linkedin",
     "jobstreet": "jobstreet", "job street": "jobstreet",
+    "careersgov": "careersgov", "careers@gov": "careersgov",
+    "careers at gov": "careersgov", "careers gov": "careersgov",
+    "public service": "careersgov", "government": "careersgov", "gov": "careersgov",
 }
 _DATES = {"past_24_hours", "past_week", "past_month", "any"}
 _LEVELS = {"entry_level", "associate", "mid_senior", "director", "executive"}

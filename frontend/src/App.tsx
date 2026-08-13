@@ -1142,13 +1142,14 @@ function StageTailor(p: TailorProps) {
             </div>
           )}
 
-          {/* full jd */}
-          <details style={{ border: '1px solid var(--rule)' }}>
-            <summary className="ov-micro" style={{ cursor: 'pointer', padding: '10px 14px', fontSize: 9 }}>full job description</summary>
-            <p style={{ padding: '4px 14px 14px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--body)', maxHeight: 384, overflowY: 'auto' }}>
+          {/* full jd — always open: the column already reserves this space, so
+              collapsing it just hides content behind a click and leaves a gap. */}
+          <div style={{ border: '1px solid var(--rule)' }}>
+            <div className="ov-micro" style={{ padding: '10px 14px', fontSize: 9, borderBottom: '1px solid var(--rule)' }}>full job description</div>
+            <p style={{ padding: '12px 14px 14px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--body)', maxHeight: 384, overflowY: 'auto', margin: 0 }}>
               {descLoading ? 'Fetching…' : activeJob.jd || 'No description available, try "original ↗".'}
             </p>
-          </details>
+          </div>
         </div>
 
         {/* control rail */}
