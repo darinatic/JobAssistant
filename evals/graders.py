@@ -19,6 +19,28 @@ def _supportable_coverage(cv: str, jd: str, tailored: str) -> float:
     return round(len(supportable & out_sk) / len(supportable), 3)
 
 
+def _sections(md: str) -> list[str]:
+    """The ``## `` section names, normalized for comparison."""
+    return [
+        line[3:].strip().lower().rstrip(":")
+        for line in md.splitlines()
+        if line.startswith("## ")
+    ]
+
+
+def _invented_sections(cv: str, tailored: str) -> list[str]:
+    """Output sections the CV does not have.
+
+    The tailor must MIRROR the CV's section structure — dropping a section is
+    allowed (the aggressive style cuts to fit), inventing one is not. Before v4 the
+    prompt hardcoded a 7-section output list including "Professional Summary", so it
+    wrote a summary for CVs that deliberately had none: a fabricated *section*.
+    No other grader catches this — fabrication, coverage and page-fit all pass.
+    """
+    have = set(_sections(cv))
+    return sorted({s for s in _sections(tailored) if s not in have})
+
+
 def _structure_ok(md: str) -> bool:
     lines = md.splitlines()
     has_name = any(line.startswith("# ") for line in lines)
@@ -46,6 +68,7 @@ def grade(cv: str, jd: str, tailored: str, forbidden: tuple[str, ...] = ()) -> d
         "fab_domain": len(report.of("domain")),
         "fab_findings": [f"{f.kind}:{f.value}" for f in report.findings],  # WHAT was flagged
         "forbidden_hits": forbidden_hits,      # empty = passed the honesty trap
+        "invented_sections": _invented_sections(cv, tailored),  # empty = mirrored the CV
         "keyword_coverage": _supportable_coverage(cv, jd, tailored),
         "fits_one_page": fit["fits_one_page"],
         "est_pages": fit["estimated_pages"],
@@ -66,6 +89,12 @@ def summarize(rows: list[dict]) -> dict:
         "honesty_clean_pct": round(100 * clean / n),
         "total_fabrications": sum(r["fabrications"] for r in graded),
         "total_forbidden_hits": sum(len(r["forbidden_hits"]) for r in graded),
+        # .get() so summaries can still be computed over result rows saved before
+        # this grader existed (evals/results/*.json from earlier runs).
+        "total_invented_sections": sum(len(r.get("invented_sections", [])) for r in graded),
+        "section_mirror_pct": round(
+            100 * sum(1 for r in graded if not r.get("invented_sections")) / n
+        ),
         "avg_keyword_coverage": round(sum(r["keyword_coverage"] for r in graded) / n, 3),
         "one_page_pct": round(100 * sum(1 for r in graded if r["fits_one_page"]) / n),
         "structure_ok_pct": round(100 * sum(1 for r in graded if r["structure_ok"]) / n),

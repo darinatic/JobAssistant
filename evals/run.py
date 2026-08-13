@@ -28,6 +28,8 @@ def _fmt_summary(s: dict) -> str:
     lines = [
         f"  honesty-clean : {s['honesty_clean']}/{s['graded']} ({s['honesty_clean_pct']}%)  "
         f"[fabrications={s['total_fabrications']} trap-hits={s['total_forbidden_hits']}]",
+        f"  section mirror: {s['section_mirror_pct']}%  "
+        f"[invented={s['total_invented_sections']}]",
         f"  keyword cover : {s['avg_keyword_coverage']}",
         f"  one page      : {s['one_page_pct']}%",
         f"  structure ok  : {s['structure_ok_pct']}%",

@@ -108,6 +108,32 @@ _JD_MLE = """ML Engineer. Own ML pipelines end to end: data prep, training, and 
 Python required; PyTorch and model-serving experience valued. Work with large datasets."""
 
 
+# Deliberately has NO Summary and NO Projects section, and leads straight into Skills
+# the way a tight one-page resume does. Every other fixture here carries a "## Summary",
+# which is exactly why the golden set never caught the tailor inventing one: the v1-v3
+# prompt hardcoded a 7-section output list, so a CV without a summary got one anyway.
+_NO_SUMMARY_CV = """# Priya Raman
+priya.raman@example.com | linkedin.com/in/priyaraman | github.com/priyaraman
+
+## Skills
+Python, PyTorch, Transformers, RAG, LangChain, FastAPI, Docker, AWS, SQL, Git
+
+## Experience
+### Machine Learning Engineer, Vector Foundry (2022-2025)
+- Built a retrieval-augmented (RAG) assistant with LangChain handling 18,000 queries per day
+- Fine-tuned a transformer classifier, lifting F1 from 0.74 to 0.89 on held-out data
+- Containerized model serving with Docker on AWS, cutting p95 latency by 35%
+### Software Engineer, Harbor Labs (2020-2022)
+- Built Python and FastAPI services backing an internal analytics product
+
+## Education
+### BSc Computer Science, Riverside University (2020)
+
+## Certifications
+AWS Certified Machine Learning Specialty
+"""
+
+
 @dataclass(frozen=True)
 class Case:
     id: str
@@ -130,4 +156,10 @@ GOLDEN: list[Case] = [
          _AI_CV, _JD_DATASCI),
     Case("long_cv_trim", "aggressive: cut old roles/projects to one page", _LONG_CV, _JD_AI,
          style="aggressive"),
+    # Graded by `_invented_sections`: the output must contain no section the CV lacks —
+    # above all no Summary/Profile/Objective. Paired with the aggressive style because
+    # that is where the tailor has the most licence to restructure, and so is the most
+    # likely to "helpfully" add a summary while cutting elsewhere.
+    Case("no_summary_mirror", "sections: mirror the CV — never invent a summary",
+         _NO_SUMMARY_CV, _JD_AI, style="aggressive"),
 ]
