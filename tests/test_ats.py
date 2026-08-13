@@ -218,3 +218,27 @@ def test_fetch_one_only_recognises_greenhouse_style_urls(url, expected):
     import re
     found = bool(re.search(r"gh_jid=(\d+)", url) or re.search(r"/jobs/(\d+)", url))
     assert found is expected
+
+
+# --- on-demand body fetch ----------------------------------------------------
+# fetch_one originally understood Greenhouse URLs only, so a Lever or Ashby posting
+# that reached the drawer without an inline body could never recover one.
+
+@pytest.mark.parametrize("url,vendor", [
+    ("https://boards.greenhouse.io/thunes/jobs/7780947003", "greenhouse"),
+    ("https://www.thunes.com/jobs/7780947003?gh_jid=7780947003", "greenhouse"),
+    ("https://jobs.lever.co/ninjavan/0b5ca845-1e59-4a41-a972-759d61cfa4a6", "lever"),
+    ("https://jobs.ashbyhq.com/airwallex/6e975468-e033-4f50-95fe-0f4351457003", "ashby"),
+])
+def test_fetch_one_recognises_every_vendor_url(url, vendor):
+    import re
+    lever = re.search(r"jobs\.lever\.co/([^/]+)/([0-9a-f-]{16,})", url)
+    ashby = re.search(r"jobs\.ashbyhq\.com/([^/]+)/([0-9a-f-]{16,})", url)
+    gh = re.search(r"gh_jid=(\d+)", url) or re.search(r"/jobs/(\d+)", url)
+    detected = "lever" if lever else "ashby" if ashby else "greenhouse" if gh else None
+    assert detected == vendor
+
+
+@pytest.mark.asyncio
+async def test_fetch_one_returns_empty_for_an_unrecognised_url():
+    assert await AtsScraper.fetch_one("https://example.com/careers/123") == ""

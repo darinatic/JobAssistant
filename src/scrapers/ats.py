@@ -34,6 +34,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.careersgov import term_matches
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +200,8 @@ def _matches(posting: _Posting, params: SearchParams) -> bool:
         return False
     if params.keyword.strip():
         haystack = f"{posting.title} {posting.company} {posting.context}".lower()
-        if not all(term in haystack for term in params.keyword.lower().split()):
+        # Whole-word, not substring: "AI" must not fire inside "M-ai-ntenance".
+        if not all(term_matches(haystack, t) for t in params.keyword.lower().split()):
             return False
     if params.remote_options and posting.workplace:
         # Unstated workplace is never excluded — Greenhouse simply doesn't say.
@@ -307,16 +309,43 @@ class AtsScraper(JobScraper):
     async def fetch_one(url: str) -> str:
         """On-demand body for a single posting (the drawer's lazy fetch).
 
-        Lever and Ashby bodies already arrive with the card, so in practice only
-        Greenhouse reaches here; the id is recovered from the public job URL.
+        Lever and Ashby bodies normally arrive inline with the card, but a posting
+        with an empty body — or any card that reaches the drawer without one — still
+        has to be recoverable, so all three vendors are handled here rather than
+        Greenhouse alone.
         """
-        match = re.search(r"gh_jid=(\d+)", url) or re.search(r"/jobs/(\d+)", url)
-        if not match:
-            return ""
-        job_id = match.group(1)
         async with httpx.AsyncClient(
             timeout=30.0, headers={"User-Agent": _UA}, follow_redirects=True
         ) as client:
+            lever = re.search(r"jobs\.lever\.co/([^/]+)/([0-9a-f-]{16,})", url)
+            if lever:
+                slug, job_id = lever.groups()
+                with contextlib.suppress(Exception):
+                    resp = await client.get(
+                        f"https://api.lever.co/v0/postings/{slug}/{job_id}?mode=json"
+                    )
+                    if resp.status_code == 200:
+                        return _from_lever(resp.json(), Board(LEVER, slug, slug)).description
+                return ""
+
+            ashby = re.search(r"jobs\.ashbyhq\.com/([^/]+)/([0-9a-f-]{16,})", url)
+            if ashby:
+                slug, job_id = ashby.groups()
+                # Ashby has no per-job endpoint; pull the board and pick the posting.
+                with contextlib.suppress(Exception):
+                    resp = await client.get(_LIST_URL[ASHBY].format(slug=slug))
+                    if resp.status_code == 200:
+                        payload = resp.json()
+                        jobs = payload.get("jobs", payload) if isinstance(payload, dict) else payload
+                        for raw in jobs or []:
+                            if str(raw.get("id")) == job_id:
+                                return _from_ashby(raw, Board(ASHBY, slug, slug)).description
+                return ""
+
+            match = re.search(r"gh_jid=(\d+)", url) or re.search(r"/jobs/(\d+)", url)
+            if not match:
+                return ""
+            job_id = match.group(1)
             for board in (b for b in BOARDS if b.ats == GREENHOUSE):
                 with contextlib.suppress(httpx.HTTPError):
                     resp = await client.get(

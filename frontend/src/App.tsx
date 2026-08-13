@@ -1146,7 +1146,7 @@ function StageTailor(p: TailorProps) {
               collapsing it just hides content behind a click and leaves a gap. */}
           <div style={{ border: '1px solid var(--rule)' }}>
             <div className="ov-micro" style={{ padding: '10px 14px', fontSize: 9, borderBottom: '1px solid var(--rule)' }}>full job description</div>
-            <p style={{ padding: '12px 14px 14px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--body)', maxHeight: 384, overflowY: 'auto', margin: 0 }}>
+            <p style={{ padding: '4px 14px 14px', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--body)', maxHeight: 384, overflowY: 'auto' }}>
               {descLoading ? 'Fetching…' : activeJob.jd || 'No description available, try "original ↗".'}
             </p>
           </div>

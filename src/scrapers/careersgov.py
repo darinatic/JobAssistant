@@ -42,7 +42,11 @@ _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 # literal with json.loads is the only correct way to unescape it — a blanket
 # `unicode_escape` decode corrupts every non-ASCII character in a job title.
 _FLIGHT_RE = re.compile(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)', re.S)
-_JOB_START_RE = re.compile(r'\{"id":"\d+/[0-9a-f-]+"')
+# Deliberately shape-agnostic on the id. Postings sourced from the board's own HR
+# system use a composite "17659145/005056a3-..." id, but the ~15% that are hosted on
+# Greenhouse or Workable use a plain numeric one. Pinning the composite shape
+# silently dropped every one of those; validation happens on the decoded object.
+_JOB_START_RE = re.compile(r'\{"id":"[^"]+","name":"')
 
 # Next.js encodes a missing value as the literal string "$undefined".
 _UNDEFINED = "$undefined"
@@ -87,7 +91,9 @@ def extract_jobs(html: str) -> list[dict]:
                 obj, _ = decoder.raw_decode(chunk, start)
             except json.JSONDecodeError:
                 continue
-            if isinstance(obj, dict) and obj.get("name") and obj.get("id"):
+            # `agency` is required too: it is what distinguishes a job record from
+            # any other {"id","name"} object the payload happens to carry.
+            if isinstance(obj, dict) and obj.get("name") and obj.get("id") and obj.get("agency"):
                 jobs.setdefault(obj["id"], obj)  # dedupe: chunks can repeat records
     return list(jobs.values())
 
@@ -120,6 +126,17 @@ _AGENCY_ALIASES = {
 }
 
 
+def term_matches(haystack: str, term: str) -> bool:
+    """Whole-word match, so a short term can't fire inside a longer word.
+
+    Plain substring matching made "AI" match "M**ai**ntenance" and
+    "Sust**ai**nability", which quietly filled an "AI engineer" search with
+    technicians. Word boundaries keep "AI-Augmented" and "AI/ML" matching, because a
+    hyphen or slash is a boundary.
+    """
+    return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", haystack) is not None
+
+
 def _matches_keyword(job: dict, keyword: str) -> bool:
     """Every whitespace-separated term must appear somewhere in the card.
 
@@ -137,7 +154,7 @@ def _matches_keyword(job: dict, keyword: str) -> bool:
         expanded = _AGENCY_ALIASES.get(term)
         if expanded and expanded.lower() in haystack:
             continue
-        if term not in haystack:
+        if not term_matches(haystack, term):
             return False
     return True
 

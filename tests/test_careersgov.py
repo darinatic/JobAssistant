@@ -233,3 +233,83 @@ def test_acronym_combines_with_a_role_term():
 
 def test_an_acronym_does_not_match_an_unrelated_agency():
     assert not _matches_keyword({**_JOB, "agency": "Land Transport Authority"}, "govtech")
+
+
+# --- id shapes ---------------------------------------------------------------
+# ~15% of the catalogue is hosted on Greenhouse or Workable rather than the board's
+# own HR system, and those postings use a PLAIN NUMERIC id instead of the composite
+# "17659145/005056a3-..." shape. Pinning the composite form silently dropped 326 of
+# 2,227 postings — the extractor must stay shape-agnostic.
+
+_GREENHOUSE_SOURCED = {
+    "id": "4004656201",
+    "name": "Assistant / Deputy Director, Strategy & Plans Office",
+    "agency": "Government Technology Agency",
+    "department": "Corporate Strategy/Top Management",
+    "employmentType": "Permanent",
+    "jobSource": "greenhouse",
+    "experienceLevels": ["4 - 6 years"],
+    "activityTimestamp": 1784332800000,
+    "isAvailable": True,
+}
+
+
+def test_plain_numeric_ids_are_extracted():
+    jobs = extract_jobs(_flight(_GREENHOUSE_SOURCED))
+    assert len(jobs) == 1
+    assert jobs[0]["id"] == "4004656201"
+
+
+def test_both_id_shapes_come_back_together():
+    jobs = extract_jobs(_flight(_JOB, _GREENHOUSE_SOURCED))
+    assert {j["id"] for j in jobs} == {_JOB["id"], "4004656201"}
+
+
+def test_workable_composite_ids_are_extracted():
+    workable = {**_GREENHOUSE_SOURCED, "id": "mddi-sg/6306547A92", "jobSource": "workable"}
+    assert extract_jobs(_flight(workable))[0]["id"] == "mddi-sg/6306547A92"
+
+
+def test_objects_without_an_agency_are_not_jobs():
+    # A looser id pattern means other {"id","name"} objects in the payload could be
+    # picked up; `agency` is what identifies a real posting.
+    assert extract_jobs(_flight({"id": "123", "name": "Some Filter Option"})) == []
+
+
+def test_greenhouse_sourced_url_uses_its_own_source_segment():
+    assert CareersGovScraper.job_url(_GREENHOUSE_SOURCED) == (
+        "https://jobs.careers.gov.sg/jobs/greenhouse/4004656201"
+    )
+
+
+# --- whole-word keyword matching ---------------------------------------------
+# Substring matching let "AI" fire inside "M(ai)ntenance" and "Sust(ai)nability",
+# filling an "AI engineer" search with technicians while inflating the result count.
+
+@pytest.mark.parametrize("haystack,term,expected", [
+    ("technician, exhibit maintenance", "ai", False),
+    ("snr engineering exec (sustainability division)", "ai", False),
+    ("training programme manager", "ai", False),
+    ("lecturer (ai-augmented product architect)", "ai", True),
+    ("ai/ml engineer", "ai", True),
+    ("principal engineer, ai & data engineering", "ai", True),
+    ("vision-ai r&d", "ai", True),
+    ("database administrator", "data", False),
+    ("data engineer", "data", True),
+    ("c++ developer", "c++", True),
+])
+def test_terms_match_whole_words_only(haystack, term, expected):
+    from src.scrapers.careersgov import term_matches
+
+    assert term_matches(haystack, term) is expected
+
+
+def test_ai_engineer_no_longer_matches_a_maintenance_technician():
+    job = {**_JOB, "name": "Technician, Exhibit Maintenance",
+           "department": "Others", "agency": "Science Centre Board"}
+    assert not _matches_keyword(job, "AI engineer")
+
+
+def test_ai_engineer_still_matches_a_real_ai_role():
+    job = {**_JOB, "name": "Lead Engineer, AI R&D (LLM), Q Team CoE"}
+    assert _matches_keyword(job, "AI engineer")
