@@ -17,6 +17,8 @@ _PLATFORM_ALIASES = {
     "careersgov": "careersgov", "careers@gov": "careersgov",
     "careers at gov": "careersgov", "careers gov": "careersgov",
     "public service": "careersgov", "government": "careersgov", "gov": "careersgov",
+    "ats": "ats", "company boards": "ats", "career pages": "ats",
+    "greenhouse": "ats", "lever": "ats", "ashby": "ats",
 }
 _DATES = {"past_24_hours", "past_week", "past_month", "any"}
 _LEVELS = {"entry_level", "associate", "mid_senior", "director", "executive"}

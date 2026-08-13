@@ -20,6 +20,7 @@ export const PLATFORM_OPTIONS = [
   { value: 'linkedin', label: 'LinkedIn' },
   { value: 'jobstreet', label: 'JobStreet' },
   { value: 'careersgov', label: 'Careers@Gov' },
+  { value: 'ats', label: 'Company Boards' },
 ]
 export const REMOTE_OPTIONS = [
   { value: 'on_site', label: 'On-site' },

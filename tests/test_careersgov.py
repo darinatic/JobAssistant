@@ -209,3 +209,27 @@ def test_description_falls_back_to_labelled_sections():
     body = parse_description(html)
     assert "What the role is" in body
     assert "Expand masthead" not in body
+
+
+# --- agency acronyms ---------------------------------------------------------
+# The board lists full legal names only, so an unexpanded "govtech" matched nothing.
+
+@pytest.mark.parametrize("term,agency", [
+    ("govtech", "Government Technology Agency"),
+    ("htx", "Home Team Science and Technology Agency (HTX)"),
+    ("dsta", "Defence Science and Technology Agency"),
+    ("csit", "Centre for Strategic Infocomm Technologies"),
+    ("lta", "Land Transport Authority"),
+])
+def test_agency_acronyms_match_full_legal_names(term, agency):
+    assert _matches_keyword({**_JOB, "agency": agency}, term)
+
+
+def test_acronym_combines_with_a_role_term():
+    job = {**_JOB, "agency": "Government Technology Agency", "name": "Data Engineer"}
+    assert _matches_keyword(job, "govtech data")
+    assert not _matches_keyword(job, "govtech chef")
+
+
+def test_an_acronym_does_not_match_an_unrelated_agency():
+    assert not _matches_keyword({**_JOB, "agency": "Land Transport Authority"}, "govtech")

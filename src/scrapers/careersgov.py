@@ -92,19 +92,54 @@ def extract_jobs(html: str) -> list[dict]:
     return list(jobs.values())
 
 
+# Agencies are listed under their full legal names, but candidates search for the
+# short ones. Without this, "govtech" matches nothing at all — the agency is
+# "Government Technology Agency". Only aliases that are genuinely unambiguous.
+_AGENCY_ALIASES = {
+    "govtech": "Government Technology Agency",
+    "htx": "Home Team Science and Technology Agency",
+    "dsta": "Defence Science and Technology Agency",
+    "csit": "Centre for Strategic Infocomm Technologies",
+    "imda": "Info-communications Media Development Authority",
+    "astar": "Agency for Science, Technology and Research",
+    "a*star": "Agency for Science, Technology and Research",
+    "csa": "Cyber Security Agency of Singapore",
+    "mas": "Monetary Authority of Singapore",
+    "hdb": "Housing and Development Board",
+    "lta": "Land Transport Authority",
+    "iras": "Inland Revenue Authority of Singapore",
+    "cpf": "Central Provident Fund Board",
+    "moe": "Ministry of Education",
+    "mom": "Ministry of Manpower",
+    "mindef": "MINDEF",
+    "scdf": "Singapore Civil Defence Force",
+    "spf": "Singapore Police Force",
+    "hsa": "Health Sciences Authority",
+    "nrf": "National Research Foundation",
+    "pub": "PUB, The National Water Agency",
+}
+
+
 def _matches_keyword(job: dict, keyword: str) -> bool:
     """Every whitespace-separated term must appear somewhere in the card.
 
     Searching title + agency + department (rather than title alone) is what makes a
     query like "data govtech" work, and department carries the site's own taxonomy
-    (e.g. "InfoComm, Technology, New Media Communications").
+    (e.g. "InfoComm, Technology, New Media Communications"). Common agency acronyms
+    are expanded first, since the board only ever lists full legal names.
     """
     if not keyword.strip():
         return True
     haystack = " ".join(
         _clean(job.get(k)) for k in ("name", "agency", "department", "employmentType")
     ).lower()
-    return all(term in haystack for term in keyword.lower().split())
+    for term in keyword.lower().split():
+        expanded = _AGENCY_ALIASES.get(term)
+        if expanded and expanded.lower() in haystack:
+            continue
+        if term not in haystack:
+            return False
+    return True
 
 
 def _matches_experience(job: dict, wanted: list[str]) -> bool:
