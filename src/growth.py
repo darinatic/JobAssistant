@@ -69,3 +69,30 @@ async def record_candidates(candidates: list[str], title: str | None) -> None:
     except Exception:  # noqa: BLE001 — best-effort telemetry, must not break tailoring
         # Anything else (auth, bad RPC, 4xx/5xx) is a real misconfiguration worth tracing.
         log.warning("growth-candidate persistence failed", exc_info=True)
+
+
+async def fetch_candidates(limit: int = 500) -> list[dict]:
+    """Read the growth queue, most frequent first — the curation script's input.
+
+    Unlike the write path this is NOT fail-open: curation is an interactive dev
+    workflow, so a broken connection should say so loudly rather than silently
+    produce an empty review list that looks like "nothing to curate".
+    """
+    if not settings.growth_persist_enabled:
+        raise RuntimeError(
+            "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set — nothing to read."
+        )
+    key = settings.supabase_service_role_key.get_secret_value()  # type: ignore[union-attr]
+    url = f"{settings.supabase_url.rstrip('/')}/rest/v1/growth_candidates"  # type: ignore[union-attr]
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            url,
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            params={
+                "select": "skill,occurrences,sample_title,first_seen,last_seen",
+                "order": "occurrences.desc,skill.asc",
+                "limit": str(limit),
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()

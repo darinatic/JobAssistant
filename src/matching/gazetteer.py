@@ -37,7 +37,7 @@ SKILLS: dict[str, list[str]] = {
     # --- Core ML / DL ------------------------------------------------------
     "Machine Learning": ["ml"],
     "Deep Learning": ["dl"],
-    "Neural Networks": ["neural network", "cnn", "rnn", "convolutional", "recurrent neural"],
+    "Neural Networks": ["neural network", "cnn", "rnn", "convolutional", "recurrent neural", "cnns", "lstm"],
     "PyTorch": ["torch"],
     "TensorFlow": ["tf", "tensor flow"],
     "Keras": [],
@@ -84,7 +84,7 @@ SKILLS: dict[str, list[str]] = {
     "Weights & Biases": ["wandb", "w&b", "weights and biases"],
     "Kubeflow": [],
     "Docker": ["containerization", "containers"],
-    "Kubernetes": ["k8s"],
+    "Kubernetes": ["k8s", "aks"],
     "CI/CD": ["cicd", "continuous integration", "continuous delivery", "continuous deployment"],
     "Airflow": ["apache airflow"],
     "DVC": ["data version control"],
@@ -201,6 +201,29 @@ SKILLS: dict[str, list[str]] = {
     "NLTK": [],
     "Diffusion Models": ["stable diffusion", "diffusion model"],
     "GitHub Copilot": ["copilot"],
+    # --- curated 2026-08-13 ---
+    "Hive": ["apache hive"],
+    "Informatica": [],
+    "Azure OpenAI": ["azure oai"],
+    "CrewAI": [],
+    "Oracle": ["oracle database", "oracle db"],
+    "Talend": [],
+    "Claude Code": [],
+    "Cursor": ["cursor ide", "cursor editor", "cursor ai"],
+    "Impala": ["apache impala"],
+    "Anomaly Detection": [],
+    "CUDA": [],
+    "CloudFormation": [],
+    "Flink": ["apache flink"],
+    "HBase": [],
+    "Llama": ["llama 4", "llama 3", "llama3"],
+    "MCP": ["model context protocol"],
+    "Podman": [],
+    "SAS": [],
+    "Teradata": [],
+    "Windsurf": [],
+    "n8n": [],
+    "GitHub": ["github enterprise", "github actions"],
 }
 
 
@@ -210,7 +233,7 @@ def _norm(s: str) -> str:
 
 # Canonicals whose bare display form is an ordinary English word — only their
 # explicit aliases may match, never the canonical itself ("go" ≠ Golang).
-_NO_BARE = {"Go", "R"}
+_NO_BARE = {"Go", "R", "Cursor"}
 
 # alias (lowercased surface) -> canonical display name.
 _ALIAS_TO_CANON: dict[str, str] = {}
