@@ -95,3 +95,9 @@ docs/
 # stray local experiment-tracking artifacts (eval tracking is LangSmith now, no local store)
 mlruns/
 mlartifacts/
+
+# Local-only working files (design handoffs, sample resumes, screenshots).
+# These were previously untracked by luck rather than by rule.
+design_handoff_*/
+*.docx
+tailor.PNG
