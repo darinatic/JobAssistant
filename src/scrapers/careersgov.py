@@ -32,6 +32,7 @@ from bs4 import BeautifulSoup
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
 from src.scrapers.parsing import lowest_careersgov_band, normalize_experience
+from src.scrapers.vocabularies import CAREERSGOV_AGENCY_ALIASES
 
 log = logging.getLogger(__name__)
 
@@ -100,30 +101,9 @@ def extract_jobs(html: str) -> list[dict]:
 
 # Agencies are listed under their full legal names, but candidates search for the
 # short ones. Without this, "govtech" matches nothing at all — the agency is
-# "Government Technology Agency". Only aliases that are genuinely unambiguous.
-_AGENCY_ALIASES = {
-    "govtech": "Government Technology Agency",
-    "htx": "Home Team Science and Technology Agency",
-    "dsta": "Defence Science and Technology Agency",
-    "csit": "Centre for Strategic Infocomm Technologies",
-    "imda": "Info-communications Media Development Authority",
-    "astar": "Agency for Science, Technology and Research",
-    "a*star": "Agency for Science, Technology and Research",
-    "csa": "Cyber Security Agency of Singapore",
-    "mas": "Monetary Authority of Singapore",
-    "hdb": "Housing and Development Board",
-    "lta": "Land Transport Authority",
-    "iras": "Inland Revenue Authority of Singapore",
-    "cpf": "Central Provident Fund Board",
-    "moe": "Ministry of Education",
-    "mom": "Ministry of Manpower",
-    "mindef": "MINDEF",
-    "scdf": "Singapore Civil Defence Force",
-    "spf": "Singapore Police Force",
-    "hsa": "Health Sciences Authority",
-    "nrf": "National Research Foundation",
-    "pub": "PUB, The National Water Agency",
-}
+# "Government Technology Agency". Lives in vocabularies.py so filters.py can use
+# it without importing this module (which would close an import cycle).
+_AGENCY_ALIASES = CAREERSGOV_AGENCY_ALIASES
 
 
 def term_matches(haystack: str, term: str) -> bool:

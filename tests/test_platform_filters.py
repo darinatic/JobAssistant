@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from src.scrapers import vocabularies as vocab
 from src.scrapers.base import DiscoveredJob
 from src.search import build_filter_report
 
@@ -92,3 +93,46 @@ async def test_scrape_fails_open_and_forwards_every_filter_to_an_undescribed_boa
     assert seen[0].experience_levels == ["entry_level"]
     assert seen[0].remote_options == ["remote"]
     assert seen[0].min_salary == 5000
+
+
+# --- harvested vocabularies --------------------------------------------------
+# Counts are NOT pinned: the MCF harvest samples a 600-job window, so its category
+# coverage legitimately varies between runs (32 on 2026-08-14, 31 the next day).
+# Pinning an exact count would fail every time the script is re-run.
+
+def test_jobstreet_work_arrangement_ids_are_the_measured_ones():
+    assert vocab.JOBSTREET_WORK_ARRANGEMENTS == {
+        "on_site": "1", "hybrid": "2", "remote": "3",
+    }
+
+
+def test_jobstreet_work_type_ids_are_the_measured_ones():
+    assert vocab.JOBSTREET_WORK_TYPES["full_time"] == "242"
+    assert vocab.JOBSTREET_WORK_TYPES["contract_temp"] == "244"
+
+
+def test_mcf_categories_use_the_names_the_api_accepts():
+    # The API 400s on a numeric category id; it accepts the display name.
+    assert "Information Technology" in vocab.MCF_CATEGORIES
+    assert len(vocab.MCF_CATEGORIES) >= 25
+
+
+def test_mcf_employment_types_are_populated():
+    assert "Full Time" in vocab.MCF_EMPLOYMENT_TYPES
+    assert "Permanent" in vocab.MCF_EMPLOYMENT_TYPES
+
+
+def test_careersgov_vocabularies_are_populated():
+    assert "Government Technology Agency" in vocab.CAREERSGOV_AGENCIES
+    assert "InfoComm, Technology, New Media Communications" in vocab.CAREERSGOV_DEPARTMENTS
+    assert len(vocab.CAREERSGOV_AGENCIES) >= 80
+
+
+def test_careersgov_experience_bands_are_the_five_the_board_uses():
+    assert set(vocab.CAREERSGOV_EXPERIENCE_BANDS) == {
+        "0 - 1 year", "1 - 3 years", "4 - 6 years", "7 - 9 years", "> 10 years",
+    }
+
+
+def test_agency_aliases_resolve_short_names():
+    assert vocab.CAREERSGOV_AGENCY_ALIASES["govtech"] == "Government Technology Agency"
