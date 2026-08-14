@@ -27,6 +27,8 @@ export const REMOTE_OPTIONS = [
   { value: 'hybrid', label: 'Hybrid' },
 ]
 export const MAX_JOBS_OPTIONS = [10, 25, 50, 100]
+// Monthly SGD. 'any' plus the bands a candidate actually filters on.
+export const SALARY_OPTIONS = [0, 3000, 4000, 5000, 6000, 8000]
 
 export type FilterState = {
   datePosted: string
@@ -34,6 +36,9 @@ export type FilterState = {
   remoteOptions: string[]
   platforms: string[]
   maxJobs: number
+  minSalary: number | null
+  // Board-native filters keyed by platform, e.g. { careersgov: { agencies: [...] } }.
+  platformFilters: Record<string, Record<string, unknown>>
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -42,6 +47,8 @@ export const DEFAULT_FILTERS: FilterState = {
   remoteOptions: [],
   platforms: [],
   maxJobs: 25,
+  minSalary: null,
+  platformFilters: {},
 }
 
 // control state -> backend `filters` payload (deterministic search path).
@@ -54,5 +61,7 @@ export function toRequestFilters(f: FilterState, keyword: string, location: stri
     remote_options: f.remoteOptions,
     platforms: f.platforms,
     max_jobs: f.maxJobs,
+    min_salary: f.minSalary,
+    platform_filters: f.platformFilters,
   }
 }

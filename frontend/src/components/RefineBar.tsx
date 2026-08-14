@@ -28,7 +28,7 @@ export function RefineBar({ jobs, allFits, refine, setRefine, visibleCount }: {
   return (
     <div style={{ borderBottom: '2px solid var(--ink)', borderLeft: '3px solid var(--geo)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '8px 17px', background: 'color-mix(in oklab, var(--geo) 6%, transparent)', borderBottom: '1px solid var(--rule)', flexWrap: 'wrap' }}>
-        <span className="ov-micro" style={{ fontSize: 9, color: 'var(--geo)' }}>▾ refine · filters the {jobs.length} results below, no new search · {visibleCount} shown</span>
+        <span className="ov-micro" style={{ fontSize: 9, color: 'var(--geo)' }}>▾ refine · narrows the {jobs.length} results you already have, no new search · {visibleCount} shown</span>
         {active && <button onClick={() => setRefine(EMPTY_REFINE)} className="ov-micro" style={{ fontSize: 9, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--dim)' }}>reset ✕</button>}
       </div>
       {levelsPresent.length > 0 && (

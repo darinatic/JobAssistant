@@ -2,8 +2,10 @@
 import { type ReactNode } from 'react'
 import {
   DATE_OPTIONS, EXPERIENCE_OPTIONS, PLATFORM_OPTIONS, REMOTE_OPTIONS, MAX_JOBS_OPTIONS,
-  type FilterState,
+  SALARY_OPTIONS, type FilterState,
 } from '@/lib/search-filters'
+import { filterSupport, type Capabilities } from '@/lib/capabilities'
+import { BoardFilters } from '@/components/BoardFilters'
 
 // ---- filter rows -----------------------------------------------------------
 
@@ -17,19 +19,31 @@ export function FilterRow({ label, note, children }: { label: string; note?: str
   )
 }
 
-export function FilterBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+export function FilterBtn({ active, onClick, children, disabled, title }: {
+  active: boolean; onClick: () => void; children: ReactNode; disabled?: boolean; title?: string
+}) {
   return (
-    <button onClick={onClick} className="ov-mono"
-      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 12px', borderRight: '1px solid var(--rule)', cursor: 'pointer', whiteSpace: 'nowrap', background: active ? 'var(--ink)' : 'transparent', color: active ? 'var(--paper)' : 'var(--dim)', fontWeight: active ? 700 : 400 }}>
+    <button onClick={onClick} disabled={disabled} title={title} className="ov-mono"
+      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 12px', borderRight: '1px solid var(--rule)', cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', background: active && !disabled ? 'var(--ink)' : 'transparent', color: disabled ? 'var(--rule)' : active ? 'var(--paper)' : 'var(--dim)', fontWeight: active && !disabled ? 700 : 400, opacity: disabled ? 0.45 : 1 }}>
       {children}
     </button>
   )
 }
 
-export function FilterRows({ filters, setDate, setMax, toggleFilter }: {
+export function FilterRows({ filters, setDate, setMax, toggleFilter, caps, setMinSalary, setPlatformFilters }: {
   filters: FilterState; setDate: (v: string) => void; setMax: (n: number) => void
   toggleFilter: (k: 'experienceLevels' | 'remoteOptions' | 'platforms', v: string) => void
+  caps: Capabilities | null
+  setMinSalary: (n: number | null) => void
+  setPlatformFilters: (platform: string, next: Record<string, unknown>) => void
 }) {
+  // Which of the shared filters the CURRENT board selection can actually honour.
+  // Replaces the old hardcoded "li only" / "li + mcf only" captions, both of which
+  // were measured wrong: LinkedIn honours neither, JobStreet honours remote.
+  const exp = filterSupport(caps, filters.platforms, 'experience_levels')
+  const remote = filterSupport(caps, filters.platforms, 'remote_options')
+  const salary = filterSupport(caps, filters.platforms, 'min_salary')
+  const unavailable = 'not available for the selected boards'
   return (
     <div style={{ borderBottom: '2px solid var(--ink)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--panel)', borderBottom: '1px solid var(--rule)', flexWrap: 'wrap' }}>
@@ -45,12 +59,37 @@ export function FilterRows({ filters, setDate, setMax, toggleFilter }: {
       <FilterRow label="boards" note="none = every board">
         {PLATFORM_OPTIONS.map((o) => <FilterBtn key={o.value} active={filters.platforms.includes(o.value)} onClick={() => toggleFilter('platforms', o.value)}>{o.label}</FilterBtn>)}
       </FilterRow>
-      <FilterRow label="experience" note="li + mcf only">
-        {EXPERIENCE_OPTIONS.map((o) => <FilterBtn key={o.value} active={filters.experienceLevels.includes(o.value)} onClick={() => toggleFilter('experienceLevels', o.value)}>{o.label}</FilterBtn>)}
+      <FilterRow label="experience" note={exp.usable ? undefined : unavailable}>
+        {EXPERIENCE_OPTIONS.map((o) => (
+          <FilterBtn key={o.value} active={filters.experienceLevels.includes(o.value)}
+            disabled={!exp.usable} title={exp.reason}
+            onClick={() => toggleFilter('experienceLevels', o.value)}>{o.label}</FilterBtn>
+        ))}
       </FilterRow>
-      <FilterRow label="remote" note="li only">
-        {REMOTE_OPTIONS.map((o) => <FilterBtn key={o.value} active={filters.remoteOptions.includes(o.value)} onClick={() => toggleFilter('remoteOptions', o.value)}>{o.label}</FilterBtn>)}
+      <FilterRow label="remote" note={remote.usable ? undefined : unavailable}>
+        {REMOTE_OPTIONS.map((o) => (
+          <FilterBtn key={o.value} active={filters.remoteOptions.includes(o.value)}
+            disabled={!remote.usable} title={remote.reason}
+            onClick={() => toggleFilter('remoteOptions', o.value)}>{o.label}</FilterBtn>
+        ))}
       </FilterRow>
+      <FilterRow label="min salary" note={salary.usable ? 'monthly, can pay at least' : unavailable}>
+        {SALARY_OPTIONS.map((n) => (
+          <FilterBtn key={n} active={(filters.minSalary ?? 0) === n}
+            disabled={!salary.usable} title={salary.reason}
+            onClick={() => setMinSalary(n === 0 ? null : n)}>
+            {n === 0 ? 'any' : `${n / 1000}k+`}
+          </FilterBtn>
+        ))}
+      </FilterRow>
+      {filters.platforms.length === 1 && (
+        <BoardFilters
+          caps={caps}
+          platform={filters.platforms[0]}
+          value={filters.platformFilters[filters.platforms[0]] ?? {}}
+          onChange={(next) => setPlatformFilters(filters.platforms[0], next)}
+        />
+      )}
     </div>
   )
 }

@@ -18,6 +18,7 @@ import { estimatePageTarget } from '@/lib/page-fit'
 import { patchSkillsLine } from '@/lib/skills'
 import { EMPTY_REFINE, type RefineState } from '@/lib/jobfmt'
 import { DEFAULT_FILTERS, toRequestFilters, type FilterState } from '@/lib/search-filters'
+import { droppedSummary, type Capabilities, type FilterReport } from '@/lib/capabilities'
 
 const CV_KEY = 'overlap.cv'    // legacy: migrated once into DOC_KEY, then retired
 const DOC_KEY = 'overlap.doc'
@@ -69,7 +70,11 @@ function Home() {
   const [query, setQuery] = useState(saved.query ?? 'AI Engineer jobs in Singapore')
   const [interpreted, setInterpreted] = useState<Record<string, any> | null>(saved.interpreted ?? null)
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
-  const [filters, setFilters] = useState<FilterState>(saved.filters ?? DEFAULT_FILTERS)
+  // Merge, don't substitute: a localStorage object saved before minSalary and
+  // platformFilters existed would otherwise restore them as undefined.
+  const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS, ...(saved.filters ?? {}) })
+  const [caps, setCaps] = useState<Capabilities | null>(null)
+  const [filterReport, setFilterReport] = useState<FilterReport | null>(null)
   const [searching, setSearching] = useState(false)
   const [pending, setPending] = useState<Set<string>>(() => new Set())
   const [refine, setRefine] = useState<RefineState>(EMPTY_REFINE)  // client-side result refinement
@@ -132,6 +137,7 @@ function Home() {
     try { localStorage.setItem(SEARCH_KEY, JSON.stringify({ query, interpreted, jobs, filters })) } catch { /* quota */ }
   }, [query, interpreted, jobs, filters, searching])
 
+  useEffect(() => { api.capabilities().then(setCaps).catch(() => setCaps(null)) }, [])
   useEffect(() => () => { searchAbort.current?.abort(); enrichAbort.current?.abort() }, [])
 
   type JobPatch = Partial<Job> & { platform: string; external_id: string }
@@ -201,6 +207,14 @@ function Home() {
   }
   function setDate(value: string) { setFilters((f) => ({ ...f, datePosted: value })) }
   function setMax(value: number) { setFilters((f) => ({ ...f, maxJobs: value })) }
+  // A board that could not honour a filter says so, instead of returning results
+  // that look identical to "nothing matched".
+  const dropped = useMemo(() => droppedSummary(filterReport), [filterReport])
+
+  function setMinSalary(value: number | null) { setFilters((f) => ({ ...f, minSalary: value })) }
+  function setPlatformFilters(platform: string, next: Record<string, unknown>) {
+    setFilters((f) => ({ ...f, platformFilters: { ...f.platformFilters, [platform]: next } }))
+  }
 
   async function onSearch() {
     if (!hasCv) return toast.error('Upload your resume first, then search.')
@@ -222,6 +236,7 @@ function Home() {
         },
         {
           onInterpreted: (d) => { setInterpreted(d) },
+          onFilterReport: (r) => { setFilterReport(r) },
           onProgress: (p) => setProgress(p),
           onJob: (j) => {
             const k = jobKey(j)
@@ -464,7 +479,8 @@ function Home() {
                     </div>
                   )}
 
-                  <FilterRows filters={filters} setDate={setDate} setMax={setMax} toggleFilter={toggleFilter} />
+                  <FilterRows filters={filters} setDate={setDate} setMax={setMax} toggleFilter={toggleFilter}
+                    caps={caps} setMinSalary={setMinSalary} setPlatformFilters={setPlatformFilters} />
 
                   {/* scoring progress after search */}
                   {!searching && pending.size > 0 && (
@@ -477,6 +493,12 @@ function Home() {
                   {floor && !searching && (
                     <div className="ov-micro" style={{ color: 'var(--honesty)', padding: '10px 20px', borderBottom: '1px solid var(--rule)' }}>
                       fewer than {progress?.target ?? 'N'} strong matches; showing the closest.
+                    </div>
+                  )}
+
+                  {dropped && (
+                    <div className="ov-micro" style={{ fontSize: 9, color: 'var(--honesty)', padding: '8px 20px', borderBottom: '1px solid var(--rule)' }}>
+                      {dropped}
                     </div>
                   )}
 

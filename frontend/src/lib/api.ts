@@ -3,6 +3,7 @@
 // frontend/.env.development) to point at the separate backend on :8000.
 import { type ResumeDoc, normalizeDoc } from './resume-doc'
 
+import type { Capabilities, FilterReport } from './capabilities'
 const API_URL = import.meta.env.VITE_API_URL || ''
 
 export class ApiError extends Error {
@@ -23,6 +24,10 @@ async function handle<T>(res: Response): Promise<T> {
     throw new ApiError(res.status, `${res.status}: ${detail}`)
   }
   return res.json() as Promise<T>
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  return handle<T>(await fetch(`${API_URL}${path}`))
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -95,6 +100,8 @@ export interface SearchFilters {
   remote_options?: string[]
   platforms?: string[]
   max_jobs?: number
+  min_salary?: number | null
+  platform_filters?: Record<string, Record<string, unknown>>
 }
 
 export interface Insights {
@@ -138,6 +145,9 @@ export interface TailorResult {
 
 // --- endpoints --------------------------------------------------------------
 export const api = {
+  // What each board can actually filter, plus its native-filter vocabularies.
+  capabilities: (): Promise<Capabilities> => getJson<Capabilities>('/search/capabilities'),
+
   parseResume: async (file: File): Promise<{ doc: ResumeDoc; chars: number }> => {
     const fd = new FormData()
     fd.append('file', file)
@@ -152,6 +162,7 @@ export const api = {
     body: { query: string; filters?: SearchFilters; resume_markdown?: string; strong_fits_only?: boolean },
     h: {
       onInterpreted: (d: Record<string, any>) => void
+      onFilterReport?: (r: FilterReport) => void
       onProgress?: (p: { found: number; target: number; scanned: number; unfetchable?: number }) => void
       onJob: (j: Job) => void
       onDone: (floor?: boolean) => void
@@ -178,6 +189,7 @@ export const api = {
         if (!line.trim()) continue
         const msg = JSON.parse(line)
         if (msg.type === 'interpreted') h.onInterpreted(msg.data)
+        else if (msg.type === 'filter_report') h.onFilterReport?.(msg.data)
         else if (msg.type === 'progress') h.onProgress?.(msg.data)
         else if (msg.type === 'job') h.onJob(msg.data)
         else if (msg.type === 'done') h.onDone(msg.floor)
