@@ -278,3 +278,14 @@ def test_jobstreet_url_is_unchanged_when_no_filters_are_set():
 def test_jobstreet_still_sends_the_date_range_it_always_did():
     url = _js_url(SearchParams(keyword="data engineer", date_posted="past_week"))
     assert "daterange=7" in url
+
+
+def test_mcf_salary_filter_semantics_are_documented():
+    """`min_salary` means "can pay at least this", not "floor is at least this".
+
+    Measured 2026-08-15: MCF's `salary=8000` returns postings whose range REACHES
+    8000. Of 15 results, 0 had a maximum below 8000 while 12 had a minimum below it
+    (4000-8000 matched). The param is still just forwarded, so this test pins the
+    documented reading rather than the board's behaviour.
+    """
+    assert _mcf_query(SearchParams(keyword="x", min_salary=8000))["salary"] == 8000

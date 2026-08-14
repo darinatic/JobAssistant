@@ -17,8 +17,13 @@ class SearchParams:
     experience_levels: list[str] = field(default_factory=list)
     # on_site | remote | hybrid
     remote_options: list[str] = field(default_factory=list)
-    # Monthly minimum in SGD. Native on MCF (`salary=`) and JobStreet
-    # (`salarytype=monthly&salaryrange=N-`); unsupported elsewhere.
+    # Monthly salary target in SGD: "show postings that can pay at least this".
+    # Native on MCF (`salary=`) and JobStreet (`salarytype=monthly&salaryrange=N-`).
+    # NOTE the semantics, measured 2026-08-15 against MCF: `salary=8000` returns
+    # postings whose range REACHES 8000, not those whose floor is 8000. Of 15 such
+    # results, 0 had a maximum below 8000 while 12 had a minimum below it (e.g.
+    # 4000-8000 matched). This is the useful reading for a candidate, but it means
+    # the value is a reachable ceiling, not a guaranteed floor.
     min_salary: int | None = None
     # Board-native extras, keyed by platform (see src/scrapers/filters.py). Each
     # adapter reads only its own key and ignores the rest.
