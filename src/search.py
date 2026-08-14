@@ -148,6 +148,7 @@ async def _scrape(
     fetch_descriptions: bool,
     master_cv: str | None = None,
     min_salary: int | None = None,
+    platform_filters: dict[str, dict] | None = None,
 ) -> AsyncIterator[dict]:
     """Yield enriched job dicts, scraping all platforms **concurrently**.
 
@@ -200,6 +201,7 @@ async def _scrape(
                     plan.pushed.get("remote_options") or plan.local.get("remote_options") or []
                 ),
                 min_salary=plan.pushed.get("min_salary") or plan.local.get("min_salary"),
+                platform_filters=platform_filters or {},
                 fetch_descriptions=fetch_descriptions,
             )
             async for job in scraper.search(params):
@@ -245,6 +247,7 @@ async def search_jobs(
     master_cv: str | None = None,
     fetch_descriptions: bool = False,
     min_salary: int | None = None,
+    platform_filters: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Collect all jobs, then (with a CV) sort by relevance. Deterministic — no LLM."""
     cv_skills = extract_skills(master_cv) if master_cv else None
@@ -252,7 +255,7 @@ async def search_jobs(
         job async for job in _scrape(
             keyword, location, platforms, max_jobs, date_posted,
             experience_levels, remote_options, cv_skills, fetch_descriptions, master_cv,
-            min_salary,
+            min_salary, platform_filters,
         )
     ]
     if cv_skills is not None:
@@ -272,13 +275,14 @@ async def search_jobs_stream(
     master_cv: str | None = None,
     fetch_descriptions: bool = False,
     min_salary: int | None = None,
+    platform_filters: dict[str, dict] | None = None,
 ) -> AsyncIterator[dict]:
     """Progressive variant — yields each job as it's scraped across all platforms."""
     cv_skills = extract_skills(master_cv) if master_cv else None
     async for job in _scrape(
         keyword, location, platforms, max_jobs, date_posted,
         experience_levels, remote_options, cv_skills, fetch_descriptions, master_cv,
-        min_salary,
+        min_salary, platform_filters,
     ):
         yield job
 
@@ -294,6 +298,7 @@ async def search_jobs_gated_stream(
     master_cv: str | None = None,
     gate: bool = True,
     min_salary: int | None = None,
+    platform_filters: dict[str, dict] | None = None,
 ) -> AsyncIterator[dict]:
     """Predictor-scored search: fetch + score each scraped job's JD (MCF inline,
     others via the bounded Browserbase pool). Yields ``{"type":"progress",...}`` and
@@ -331,6 +336,7 @@ async def search_jobs_gated_stream(
                 keyword, location, platforms, cap, date_posted,
                 experience_levels, remote_options, cv_skills,
                 fetch_descriptions=False, master_cv=None, min_salary=min_salary,
+                platform_filters=platform_filters,
             ):
                 await card_q.put(job)
         finally:

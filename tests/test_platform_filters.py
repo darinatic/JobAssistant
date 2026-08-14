@@ -5,6 +5,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
+from src.scrapers import SearchParams
 from src.scrapers import vocabularies as vocab
 from src.scrapers.base import DiscoveredJob
 from src.scrapers.filters import (
@@ -13,6 +14,8 @@ from src.scrapers.filters import (
     McfFilters,
     filters_for,
 )
+from src.scrapers.jobstreet import JobStreetScraper
+from src.scrapers.mycareersfuture import MyCareersFutureScraper
 from src.search import build_filter_report
 
 
@@ -201,3 +204,77 @@ def test_filters_for_rejects_unknown_platform():
 def test_every_board_descriptor_carries_its_filter_model():
     from src.scrapers import ALL_CAPABILITIES
     assert all(c.filters_model is not None for c in ALL_CAPABILITIES.values())
+
+
+# --- native filters reach the boards ----------------------------------------
+
+def _mcf_query(params):
+    """The query dict MCF would send, without performing any HTTP request."""
+    return MyCareersFutureScraper()._build_query(params, offset=0, page_limit=30)
+
+
+def _js_url(params, page=1):
+    return JobStreetScraper()._build_search_url(params, page)
+
+
+def test_mcf_sends_salary_floor():
+    assert _mcf_query(SearchParams(keyword="data", min_salary=5000))["salary"] == 5000
+
+
+def test_mcf_sends_categories_and_employment_types():
+    q = _mcf_query(SearchParams(keyword="data", platform_filters={"mycareersfuture": {
+        "categories": ["Information Technology"], "employment_types": ["Full Time"],
+    }}))
+    assert q["categories"] == ["Information Technology"]
+    assert q["employmentTypes"] == ["Full Time"]
+
+
+def test_mcf_ignores_another_boards_filters():
+    q = _mcf_query(SearchParams(
+        keyword="data", platform_filters={"careersgov": {"agencies": ["govtech"]}},
+    ))
+    assert "categories" not in q and "agencies" not in q
+
+
+def test_mcf_omits_absent_filters():
+    q = _mcf_query(SearchParams(keyword="data"))
+    assert "salary" not in q and "categories" not in q
+
+
+def test_jobstreet_sends_remote_as_workarrangement():
+    assert "workarrangement=3" in _js_url(
+        SearchParams(keyword="data engineer", remote_options=["remote"])
+    )
+
+
+def test_jobstreet_sends_a_monthly_salary_floor():
+    url = _js_url(SearchParams(keyword="data engineer", min_salary=5000))
+    assert "salarytype=monthly" in url
+    assert "salaryrange=5000-" in url
+
+
+def test_jobstreet_salary_range_takes_an_upper_bound_from_native_filters():
+    url = _js_url(SearchParams(
+        keyword="data engineer", min_salary=5000,
+        platform_filters={"jobstreet": {"salary_max": 8000}},
+    ))
+    assert "salaryrange=5000-8000" in url
+
+
+def test_jobstreet_sends_work_type():
+    url = _js_url(SearchParams(
+        keyword="data engineer", platform_filters={"jobstreet": {"work_types": ["full_time"]}},
+    ))
+    assert "worktype=242" in url
+
+
+def test_jobstreet_url_is_unchanged_when_no_filters_are_set():
+    # date_posted must be set explicitly: SearchParams defaults it to "past_week",
+    # which legitimately adds &daterange=7.
+    url = _js_url(SearchParams(keyword="data engineer", date_posted="any"))
+    assert url == "https://sg.jobstreet.com/data-engineer-jobs/in-Singapore?page=1"
+
+
+def test_jobstreet_still_sends_the_date_range_it_always_did():
+    url = _js_url(SearchParams(keyword="data engineer", date_posted="past_week"))
+    assert "daterange=7" in url

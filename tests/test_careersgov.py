@@ -16,10 +16,12 @@ from src.scrapers.careersgov import (
     _experience_raw,
     _matches_experience,
     _matches_keyword,
+    _matches_native,
     _posted_date,
     extract_jobs,
     parse_description,
 )
+from src.scrapers.filters import CareersGovFilters
 from src.scrapers.parsing import lowest_careersgov_band, normalize_experience
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "careersgov_detail.html"
@@ -352,3 +354,40 @@ def test_sentinel_levels_are_not_excluded_by_an_experience_filter():
 
 def test_sentinel_levels_do_not_leak_characters_into_experience_raw():
     assert _experience_raw(_JOB_UNDEFINED_LEVELS) == ""
+
+
+# --- board-native local filters ----------------------------------------------
+# Free here in a way they are nowhere else: the whole catalogue arrives in ONE
+# request, so every record field is a filter dimension at no extra fetch cost.
+
+_NOW_MS = 1786000000000.0  # fixed clock; the fixture's closingTimestamp is 1787011200000
+
+
+def test_agency_filter_matches_the_legal_name_via_an_alias():
+    assert _matches_native(_JOB, CareersGovFilters(agencies=["govtech"]), _NOW_MS) is True
+
+
+def test_agency_filter_excludes_other_agencies():
+    assert _matches_native(_JOB, CareersGovFilters(agencies=["htx"]), _NOW_MS) is False
+
+
+def test_department_filter_matches():
+    f = CareersGovFilters(departments=["InfoComm, Technology, New Media Communications"])
+    assert _matches_native(_JOB, f, _NOW_MS) is True
+
+
+def test_employment_type_filter_excludes_a_mismatch():
+    assert _matches_native(_JOB, CareersGovFilters(employment_types=["Internship"]), _NOW_MS) is False
+
+
+def test_closing_within_days_keeps_a_posting_closing_soon():
+    # closingTimestamp is ~11.7 days after _NOW_MS
+    assert _matches_native(_JOB, CareersGovFilters(closing_within_days=30), _NOW_MS) is True
+
+
+def test_closing_within_days_excludes_a_posting_closing_later():
+    assert _matches_native(_JOB, CareersGovFilters(closing_within_days=3), _NOW_MS) is False
+
+
+def test_no_native_filters_matches_everything():
+    assert _matches_native(_JOB, CareersGovFilters(), _NOW_MS) is True

@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.filters import McfFilters
 from src.scrapers.parsing import normalize_experience
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -43,12 +44,39 @@ class MyCareersFutureScraper(JobScraper):
     BASE_URL = "https://api.mycareersfuture.gov.sg/v2/jobs/"
     PAGE_SIZE = 100  # max recommended by the unofficial API client
 
-    async def search(self, params: SearchParams) -> AsyncIterator[DiscoveredJob]:
+    def _build_query(self, params: SearchParams, offset: int, page_limit: int) -> dict:
+        """The MCF query for one page.
+
+        `categories`, `employmentTypes` and `salary` are real server-side filters
+        (measured 2026-08-14: salary=8000 cut a 12,838-result search to 3,253).
+        Note MCF rejects a NUMERIC category id with HTTP 400 — it wants the name.
+        """
         position_levels: list[str] = []
         for lvl in params.experience_levels:
             position_levels.extend(_POSITION_LEVELS.get(lvl, []))
         position_levels = list(dict.fromkeys(position_levels))  # dedupe, keep order
 
+        query: dict = {
+            "search": params.keyword,
+            "limit": page_limit,
+            "offset": offset,
+            "sortBy": "new_posting_date",  # newest first (needed for the date cutoff)
+        }
+        if position_levels:
+            query["positionLevels"] = position_levels  # httpx repeats list params
+        if params.min_salary:
+            query["salary"] = params.min_salary
+
+        extras = McfFilters(**(params.platform_filters.get(self.PLATFORM) or {}))
+        if extras.categories:
+            query["categories"] = extras.categories
+        if extras.employment_types:
+            query["employmentTypes"] = extras.employment_types
+        if extras.schemes:
+            query["schemes"] = extras.schemes
+        return query
+
+    async def search(self, params: SearchParams) -> AsyncIterator[DiscoveredJob]:
         days = _DATE_DAYS.get(params.date_posted)
         cutoff = datetime.date.today() - datetime.timedelta(days=days) if days else None
 
@@ -62,14 +90,7 @@ class MyCareersFutureScraper(JobScraper):
                 # a shrinking limit crawls ~1 job/request (1s sleep each), which can
                 # stall the whole search for minutes. The inner loop caps output.
                 page_limit = min(self.PAGE_SIZE, max(params.max_jobs, 30))
-                query: dict = {
-                    "search": params.keyword,
-                    "limit": page_limit,
-                    "offset": offset,
-                    "sortBy": "new_posting_date",  # newest first (needed for the date cutoff)
-                }
-                if position_levels:
-                    query["positionLevels"] = position_levels  # httpx repeats list params
+                query = self._build_query(params, offset, page_limit)
                 resp = await client.get(self.BASE_URL, params=query)
                 resp.raise_for_status()
                 data = resp.json()

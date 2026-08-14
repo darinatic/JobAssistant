@@ -13,7 +13,9 @@ from collections.abc import AsyncIterator
 
 from src.browser.stealth import HumanBehavior, StealthBrowser
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.filters import JobStreetFilters
 from src.scrapers.parsing import parse_salary
+from src.scrapers.vocabularies import JOBSTREET_WORK_ARRANGEMENTS, JOBSTREET_WORK_TYPES
 
 # JobStreet's URL slug convention: lowercase, hyphen-separated.
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -100,12 +102,33 @@ class JobStreetScraper(JobScraper):
                 return ""
 
     def _build_search_url(self, params: SearchParams, page: int) -> str:
+        """Search URL for one page.
+
+        JobStreet canonicalises these query params into path segments
+        (?worktype=242&workarrangement=2 -> /full-time/hybrid), so both forms work.
+        Measured 2026-08-14: workarrangement 1=on-site, 2=hybrid, 3=remote;
+        worktype 242=full-time, 243=part-time, 244=contract-temp, 245=casual.
+        """
         kw_slug = _slugify(params.keyword) or "jobs"
         loc_slug = urllib.parse.quote(params.location)
         url = f"{self.BASE_URL}/{kw_slug}-jobs/in-{loc_slug}?page={page}"
+
         daterange = _JS_DATERANGE.get(params.date_posted)
         if daterange:
             url += f"&daterange={daterange}"
+
+        extras = JobStreetFilters(**(params.platform_filters.get(self.PLATFORM) or {}))
+
+        for opt in params.remote_options:
+            code = JOBSTREET_WORK_ARRANGEMENTS.get(opt)
+            if code:
+                url += f"&workarrangement={code}"
+        for wt in extras.work_types:
+            url += f"&worktype={JOBSTREET_WORK_TYPES[wt]}"
+
+        if params.min_salary:
+            upper = extras.salary_max or ""
+            url += f"&salarytype={extras.salary_type}&salaryrange={params.min_salary}-{upper}"
         return url
 
     async def _parse_card(self, card) -> DiscoveredJob | None:

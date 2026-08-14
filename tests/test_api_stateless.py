@@ -255,3 +255,35 @@ def test_job_description_fit_none_when_predictor_off(client):
             "resume_markdown": _CV})
     assert r.status_code == 200, r.text
     assert r.json()["fit"] is None
+
+
+# --- capability discovery ----------------------------------------------------
+
+def test_capabilities_lists_every_board(client):
+    r = client.get("/search/capabilities")
+    assert r.status_code == 200
+    boards = r.json()["boards"]
+    assert set(boards) == {"mycareersfuture", "linkedin", "jobstreet", "careersgov"}
+
+
+def test_capabilities_report_the_measured_verdicts(client):
+    boards = client.get("/search/capabilities").json()["boards"]
+    assert boards["linkedin"]["common"]["remote_options"] == "unsupported"
+    assert boards["jobstreet"]["common"]["remote_options"] == "native"
+
+
+def test_capabilities_explain_unsupported_filters(client):
+    boards = client.get("/search/capabilities").json()["boards"]
+    assert boards["careersgov"]["notes"]["min_salary"]
+
+
+def test_capabilities_include_native_filter_schemas(client):
+    boards = client.get("/search/capabilities").json()["boards"]
+    props = boards["careersgov"]["native_filters"]["properties"]
+    assert "agencies" in props and "closing_within_days" in props
+
+
+def test_capabilities_publish_vocabularies(client):
+    vocabs = client.get("/search/capabilities").json()["vocabularies"]
+    assert "Government Technology Agency" in vocabs["careersgov_agencies"]
+    assert "Information Technology" in vocabs["mcf_categories"]

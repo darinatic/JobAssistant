@@ -317,6 +317,41 @@ async def resume_parse(file: UploadFile = File(...)) -> ResumeParseResponse:
     return ResumeParseResponse(doc=doc, chars=len(text))
 
 
+@app.get("/search/capabilities")
+async def search_capabilities() -> dict:
+    """What each board can actually filter, plus the vocabularies for its native filters.
+
+    Published so the UI can grey out a filter the selected boards cannot honour
+    (instead of accepting the click and dropping it), and so an agent calling this
+    service can discover valid values rather than guessing at them.
+    """
+    from src.scrapers import vocabularies as vocab
+    from src.scrapers.capabilities import ALL_CAPABILITIES
+
+    boards = {
+        name: {
+            "common": {k: str(v) for k, v in caps.common.items()},
+            "notes": caps.notes,
+            "native_filters": (
+                caps.filters_model.model_json_schema() if caps.filters_model else None
+            ),
+        }
+        for name, caps in ALL_CAPABILITIES.items()
+    }
+    return {
+        "boards": boards,
+        "vocabularies": {
+            "mcf_categories": list(vocab.MCF_CATEGORIES),
+            "mcf_employment_types": list(vocab.MCF_EMPLOYMENT_TYPES),
+            "jobstreet_work_types": sorted(vocab.JOBSTREET_WORK_TYPES),
+            "jobstreet_work_arrangements": sorted(vocab.JOBSTREET_WORK_ARRANGEMENTS),
+            "careersgov_agencies": list(vocab.CAREERSGOV_AGENCIES),
+            "careersgov_departments": list(vocab.CAREERSGOV_DEPARTMENTS),
+            "careersgov_employment_types": list(vocab.CAREERSGOV_EMPLOYMENT_TYPES),
+        },
+    }
+
+
 def _filter_report_for(q) -> dict[str, dict]:
     """Which of this query's filters each targeted board honoured, and which it dropped."""
     return job_search.build_filter_report(
@@ -346,6 +381,7 @@ async def search(req: SearchRequest) -> SearchResponse:
         experience_levels=q.experience_levels,
         remote_options=q.remote_options,
         min_salary=q.min_salary,
+        platform_filters=q.platform_filters,
         master_cv=req.resume_markdown,
     )
     return SearchResponse(
@@ -377,7 +413,7 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
                 keyword=q.keyword, location=q.location, platforms=q.platforms or None,
                 max_jobs=q.max_jobs, date_posted=q.date_posted,
                 experience_levels=q.experience_levels, remote_options=q.remote_options,
-                min_salary=q.min_salary,
+                min_salary=q.min_salary, platform_filters=q.platform_filters,
                 master_cv=req.resume_markdown, gate=req.strong_fits_only,
             ):
                 if msg.get("type") == "job" and msg["data"].get("below_threshold"):
@@ -389,7 +425,7 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
                 keyword=q.keyword, location=q.location, platforms=q.platforms or None,
                 max_jobs=q.max_jobs, date_posted=q.date_posted,
                 experience_levels=q.experience_levels, remote_options=q.remote_options,
-                min_salary=q.min_salary,
+                min_salary=q.min_salary, platform_filters=q.platform_filters,
                 master_cv=req.resume_markdown,
             ):
                 yield json.dumps({"type": "job", "data": job}) + "\n"

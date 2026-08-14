@@ -1,8 +1,8 @@
 """Natural-language → structured job-search filters (one Haiku call).
 
 Turns "find 50 remote AI Engineer jobs on JobStreet posted this week" into a
-``SearchQuery`` the scrapers understand. Note: only LinkedIn currently applies
-date/experience/remote filters (MCF + JobStreet ignore them) — see search.py.
+``SearchQuery`` the scrapers understand. Which board honours which filter is
+declared in ``src/scrapers/capabilities.py`` and enforced there, not here.
 """
 
 from pydantic import BaseModel, Field, field_validator
@@ -38,6 +38,10 @@ class SearchQuery(BaseModel):
         default=None, description="Minimum MONTHLY salary in SGD, e.g. 5000",
     )
     max_jobs: int = Field(default=25, description="How many jobs to return (1-100)")
+    platform_filters: dict[str, dict] = Field(
+        default_factory=dict,
+        description="Board-native filters keyed by platform; not inferred by the LLM",
+    )
     platforms: list[str] = Field(
         default_factory=list,
         description="Any of: mycareersfuture, linkedin, jobstreet. Empty = all platforms.",

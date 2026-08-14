@@ -31,6 +31,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.filters import CareersGovFilters
 from src.scrapers.parsing import lowest_careersgov_band, normalize_experience
 from src.scrapers.vocabularies import CAREERSGOV_AGENCY_ALIASES
 
@@ -166,6 +167,27 @@ def _matches_experience(job: dict, wanted: list[str]) -> bool:
     return bool(levels & allowed) if allowed else True
 
 
+def _matches_native(job: dict, extras: CareersGovFilters, now_ms: float) -> bool:
+    """Board-specific narrowing, applied locally.
+
+    Free here in a way it is nowhere else: the whole catalogue arrives in ONE
+    request, so every record field is a filter dimension at no extra fetch cost.
+    """
+    if extras.agencies and _clean(job.get("agency")) not in extras.agencies:
+        return False
+    if extras.departments and _clean(job.get("department")) not in extras.departments:
+        return False
+    if extras.employment_types and _clean(job.get("employmentType")) not in extras.employment_types:
+        return False
+    if extras.closing_within_days is not None:
+        closing = job.get("closingTimestamp")
+        if not isinstance(closing, (int, float)):
+            return False  # cannot confirm it closes in the window
+        if closing > now_ms + extras.closing_within_days * 86_400_000:
+            return False
+    return True
+
+
 def _posted_date(job: dict) -> str:
     ts = job.get("activityTimestamp")
     if not isinstance(ts, (int, float)):
@@ -210,6 +232,9 @@ class CareersGovScraper(JobScraper):
                 cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)
                 cutoff_ms = cutoff.timestamp() * 1000
 
+            extras = CareersGovFilters(**(params.platform_filters.get(self.PLATFORM) or {}))
+            now_ms = datetime.datetime.now(datetime.UTC).timestamp() * 1000
+
             selected: list[dict] = []
             for job in catalogue:
                 if job.get("isAvailable") is False:
@@ -217,6 +242,8 @@ class CareersGovScraper(JobScraper):
                 if not _matches_keyword(job, params.keyword):
                     continue
                 if not _matches_experience(job, params.experience_levels):
+                    continue
+                if not _matches_native(job, extras, now_ms):
                     continue
                 ts = job.get("activityTimestamp")
                 if cutoff_ms and isinstance(ts, (int, float)) and ts < cutoff_ms:
