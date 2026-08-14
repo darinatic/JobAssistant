@@ -159,10 +159,25 @@ def _matches_keyword(job: dict, keyword: str) -> bool:
     return True
 
 
+def _coerce_levels(job: dict) -> list[str]:
+    """The posting's stated experience bands, or [] when it states none.
+
+    Next.js encodes a missing value as the literal string "$undefined", and it does
+    so for the WHOLE field, not just its elements. Iterating that string yields
+    characters, which used to make a posting look like it stated the bands
+    {'$','u','n','d','e','f','i'} — never matching a real band, so an experience
+    filter silently excluded it (33 live postings, mostly GovTech).
+    """
+    raw = job.get("experienceLevels")
+    if not isinstance(raw, list):
+        return []
+    return [lv for lv in raw if isinstance(lv, str) and lv != _UNDEFINED]
+
+
 def _matches_experience(job: dict, wanted: list[str]) -> bool:
     if not wanted:
         return True
-    levels = {lv for lv in (job.get("experienceLevels") or []) if lv != _UNDEFINED}
+    levels = set(_coerce_levels(job))
     if not levels:
         return True  # unstated — don't exclude on a field the posting never filled in
     allowed: set[str] = set()
@@ -181,8 +196,7 @@ def _posted_date(job: dict) -> str:
 
 
 def _experience_raw(job: dict) -> str:
-    levels = [lv for lv in (job.get("experienceLevels") or []) if lv != _UNDEFINED]
-    return ", ".join(levels)
+    return ", ".join(_coerce_levels(job))
 
 
 class CareersGovScraper(JobScraper):
@@ -242,9 +256,7 @@ class CareersGovScraper(JobScraper):
         raw_levels = _experience_raw(job)
         # A posting can list several bands; normalize on the lowest, which is the
         # least experience it will accept.
-        lowest = lowest_careersgov_band(
-            [lv for lv in (job.get("experienceLevels") or []) if lv != _UNDEFINED]
-        )
+        lowest = lowest_careersgov_band(_coerce_levels(job))
         return DiscoveredJob(
             platform=self.PLATFORM,
             external_id=str(job.get("id", "")),

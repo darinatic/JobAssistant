@@ -12,6 +12,8 @@ import pytest
 from src.scrapers import build_scraper
 from src.scrapers.careersgov import (
     CareersGovScraper,
+    _coerce_levels,
+    _experience_raw,
     _matches_experience,
     _matches_keyword,
     _posted_date,
@@ -313,3 +315,40 @@ def test_ai_engineer_no_longer_matches_a_maintenance_technician():
 def test_ai_engineer_still_matches_a_real_ai_role():
     job = {**_JOB, "name": "Lead Engineer, AI R&D (LLM), Q Team CoE"}
     assert _matches_keyword(job, "AI engineer")
+
+
+# --- experience levels: the "$undefined" sentinel ----------------------------
+# Next.js encodes a missing value as the literal string "$undefined", and does so
+# for the WHOLE field, not just its elements. 33 live postings (mostly GovTech)
+# carry it, and iterating a string yields characters — so the old element-level
+# guard never fired and every experience-filtered search silently dropped them.
+
+_JOB_UNDEFINED_LEVELS = {
+    **_JOB,
+    "id": "17659145/undefined-levels",
+    "name": "Data Engineer (ESG)",
+    "experienceLevels": "$undefined",
+}
+
+
+def test_coerce_levels_treats_sentinel_string_as_unstated():
+    assert _coerce_levels(_JOB_UNDEFINED_LEVELS) == []
+
+
+def test_coerce_levels_keeps_real_bands():
+    assert _coerce_levels(_JOB) == ["1 - 3 years", "4 - 6 years"]
+
+
+def test_coerce_levels_drops_sentinel_elements():
+    job = {**_JOB, "experienceLevels": ["1 - 3 years", "$undefined"]}
+    assert _coerce_levels(job) == ["1 - 3 years"]
+
+
+def test_sentinel_levels_are_not_excluded_by_an_experience_filter():
+    # Unstated experience must never exclude — the posting is simply silent on it.
+    assert _matches_experience(_JOB_UNDEFINED_LEVELS, ["entry_level"]) is True
+    assert _matches_experience(_JOB_UNDEFINED_LEVELS, ["mid_senior"]) is True
+
+
+def test_sentinel_levels_do_not_leak_characters_into_experience_raw():
+    assert _experience_raw(_JOB_UNDEFINED_LEVELS) == ""
