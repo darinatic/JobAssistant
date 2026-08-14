@@ -15,7 +15,7 @@ lost — it falls to the client-side refine bar over the fetched results.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from pydantic import BaseModel
@@ -152,3 +152,27 @@ def partition_filters(platform: str, requested: dict[str, object]) -> FilterPlan
             dropped[key] = caps.notes.get(key, _DEFAULT_REASON)
 
     return FilterPlan(pushed=pushed, local=local, dropped=dropped)
+
+
+def _attach_filter_models() -> None:
+    """Bind each board's native-filter model to its descriptor.
+
+    Late-bound and called from src/scrapers/__init__.py after every adapter is
+    imported: filters.py imports vocabularies, and binding at module scope here
+    would order-couple this module to it.
+    """
+    from src.scrapers.filters import (
+        CareersGovFilters,
+        JobStreetFilters,
+        LinkedInFilters,
+        McfFilters,
+    )
+
+    models: dict[str, type[BaseModel]] = {
+        "mycareersfuture": McfFilters,
+        "jobstreet": JobStreetFilters,
+        "careersgov": CareersGovFilters,
+        "linkedin": LinkedInFilters,
+    }
+    for name, model in models.items():
+        ALL_CAPABILITIES[name] = replace(ALL_CAPABILITIES[name], filters_model=model)

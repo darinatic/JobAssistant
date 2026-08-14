@@ -5,6 +5,7 @@ from src.scrapers.capabilities import (
     ALL_CAPABILITIES,
     BoardCapabilities,
     Support,
+    _attach_filter_models,
     capabilities_for,
 )
 from src.scrapers.careersgov import CareersGovScraper
@@ -25,6 +26,10 @@ __all__ = [
     "LinkedInGuestScraper",
     "JobStreetScraper",
 ]
+
+
+# Bind the native-filter models now that every adapter module is imported.
+_attach_filter_models()
 
 
 def build_scraper(platform: str) -> JobScraper:

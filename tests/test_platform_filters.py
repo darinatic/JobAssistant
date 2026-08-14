@@ -3,9 +3,16 @@
 import asyncio
 
 import pytest
+from pydantic import ValidationError
 
 from src.scrapers import vocabularies as vocab
 from src.scrapers.base import DiscoveredJob
+from src.scrapers.filters import (
+    CareersGovFilters,
+    JobStreetFilters,
+    McfFilters,
+    filters_for,
+)
 from src.search import build_filter_report
 
 
@@ -136,3 +143,61 @@ def test_careersgov_experience_bands_are_the_five_the_board_uses():
 
 def test_agency_aliases_resolve_short_names():
     assert vocab.CAREERSGOV_AGENCY_ALIASES["govtech"] == "Government Technology Agency"
+
+
+# --- per-adapter native filter models ---------------------------------------
+
+def test_mcf_filters_accept_measured_values():
+    f = McfFilters(
+        categories=["Information Technology"], employment_types=["Full Time"],
+    )
+    assert f.categories == ["Information Technology"]
+
+
+def test_unknown_vocabulary_value_passes_through_rather_than_raising():
+    """A board can add a category tomorrow; rejecting it would be worse than allowing it."""
+    f = McfFilters(categories=["Quantum Basket Weaving"])
+    assert f.categories == ["Quantum Basket Weaving"]
+
+
+def test_careersgov_agency_alias_resolves_to_the_legal_name():
+    f = CareersGovFilters(agencies=["govtech"])
+    assert f.agencies == ["Government Technology Agency"]
+
+
+def test_careersgov_closing_within_days_is_bounded():
+    with pytest.raises(ValidationError):
+        CareersGovFilters(closing_within_days=0)
+
+
+def test_jobstreet_rejects_an_invalid_work_arrangement():
+    """Board-assigned ids are validated strictly: an id we never measured means
+    nothing to JobStreet, so passing it through would silently do nothing."""
+    with pytest.raises(ValidationError):
+        JobStreetFilters(work_arrangements=["teleport"])
+
+
+def test_jobstreet_accepts_the_measured_arrangements():
+    assert JobStreetFilters(work_arrangements=["remote", "hybrid"]).work_arrangements == [
+        "remote", "hybrid",
+    ]
+
+
+def test_filters_for_returns_none_when_a_board_has_no_extras_requested():
+    assert filters_for("linkedin", {}) is None
+
+
+def test_filters_for_builds_the_right_model():
+    f = filters_for("careersgov", {"agencies": ["htx"]})
+    assert isinstance(f, CareersGovFilters)
+    assert f.agencies == ["Home Team Science and Technology Agency"]
+
+
+def test_filters_for_rejects_unknown_platform():
+    with pytest.raises(ValueError):
+        filters_for("indeed", {"agencies": ["htx"]})
+
+
+def test_every_board_descriptor_carries_its_filter_model():
+    from src.scrapers import ALL_CAPABILITIES
+    assert all(c.filters_model is not None for c in ALL_CAPABILITIES.values())

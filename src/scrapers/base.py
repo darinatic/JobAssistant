@@ -20,6 +20,9 @@ class SearchParams:
     # Monthly minimum in SGD. Native on MCF (`salary=`) and JobStreet
     # (`salarytype=monthly&salaryrange=N-`); unsupported elsewhere.
     min_salary: int | None = None
+    # Board-native extras, keyed by platform (see src/scrapers/filters.py). Each
+    # adapter reads only its own key and ignores the rest.
+    platform_filters: dict[str, dict] = field(default_factory=dict)
     max_jobs: int = 25
     # When False, scrapers that need a separate detail fetch (LinkedIn, JobStreet)
     # return cards WITHOUT descriptions — the client fetches them on demand when a
