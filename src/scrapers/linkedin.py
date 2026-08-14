@@ -38,17 +38,6 @@ DATE_POSTED_MAP = {
     "any": "",
 }
 
-EXPERIENCE_MAP = {
-    "internship": "1",
-    "entry_level": "2",
-    "associate": "3",
-    "mid_senior": "4",
-    "director": "5",
-    "executive": "6",
-}
-
-REMOTE_MAP = {"on_site": "1", "remote": "2", "hybrid": "3"}
-
 _DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -115,6 +104,14 @@ class LinkedInGuestScraper(JobScraper):
                 await asyncio.sleep(random.uniform(3.0, 8.0))
 
     def _build_query(self, params: SearchParams) -> dict[str, str]:
+        """Only the parameters the guest endpoint actually honours.
+
+        f_E (experience) and f_WT (work type) are DELIBERATELY absent: measured
+        2026-08-14, the guest endpoint ignores both. `f_E=1` (internship only) and
+        `f_E=6` (executive only) return byte-identical result sets. Sending them
+        cost a parameter and bought nothing, while the UI advertised the filter as
+        working. See src/scrapers/capabilities.py.
+        """
         q: dict[str, str] = {
             "keywords": params.keyword,
             "location": params.location,
@@ -123,14 +120,6 @@ class LinkedInGuestScraper(JobScraper):
         tpr = DATE_POSTED_MAP.get(params.date_posted, "")
         if tpr:
             q["f_TPR"] = tpr
-        if params.experience_levels:
-            vals = [EXPERIENCE_MAP[e] for e in params.experience_levels if e in EXPERIENCE_MAP]
-            if vals:
-                q["f_E"] = ",".join(vals)
-        if params.remote_options:
-            vals = [REMOTE_MAP[r] for r in params.remote_options if r in REMOTE_MAP]
-            if vals:
-                q["f_WT"] = ",".join(vals)
         return q
 
     def _parse_card(self, card) -> DiscoveredJob | None:

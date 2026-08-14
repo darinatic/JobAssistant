@@ -1,6 +1,12 @@
 """Job scrapers — one module per platform, all conform to JobScraper."""
 
 from src.scrapers.base import DiscoveredJob, JobScraper, SearchParams
+from src.scrapers.capabilities import (
+    ALL_CAPABILITIES,
+    BoardCapabilities,
+    Support,
+    capabilities_for,
+)
 from src.scrapers.careersgov import CareersGovScraper
 from src.scrapers.jobstreet import JobStreetScraper
 from src.scrapers.linkedin import LinkedInGuestScraper
@@ -10,6 +16,10 @@ __all__ = [
     "DiscoveredJob",
     "JobScraper",
     "SearchParams",
+    "ALL_CAPABILITIES",
+    "BoardCapabilities",
+    "Support",
+    "capabilities_for",
     "MyCareersFutureScraper",
     "CareersGovScraper",
     "LinkedInGuestScraper",
