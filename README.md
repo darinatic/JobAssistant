@@ -5,7 +5,7 @@
 Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LLM roles in Singapore. It does two things:
 
 1. **Tailor your resume** to a specific job — ATS-safe, keyword-exact, and honest (it never invents skills or history you don't have), rendered to a clean LaTeX PDF.
-2. **Search live jobs** across three platforms at once, showing exactly which of each posting's skills your CV already covers, plus a **job-intel panel** that flags scam/ghost postings.
+2. **Search live jobs** across four platforms at once (including Singapore's public service board), showing exactly which of each posting's skills your CV already covers, plus a **job-intel panel** that flags scam/ghost postings.
 
 > **No account, and your résumé is never stored.** Your CV lives in your browser's `localStorage` and is re-sent per request. Uploading and searching send it to the backend (skill matching is local — no LLM); tailoring sends it to the AI (Claude), but a **PII guardrail strips your name, email, and phone first**, so the model only ever tailors an anonymized copy and your details are restored locally. The one thing we persist is **anonymous job-skill telemetry** (posting vocabulary, for taxonomy tuning) — never your CV or identity. Anyone can try it instantly.
 
@@ -38,7 +38,7 @@ Overlap is a **stateless** AI resume-tailoring + job-search web app for AI/ML/LL
 
 ### Architecture
 
-A React single-page app talks to a stateless FastAPI backend over JSON. The backend is a set of **pure functions of the request body** — it calls out to Claude for the language-heavy steps, to a local deterministic matcher for skill scoring (no LLM), to Tectonic for PDF rendering, and to three job scrapers. No user data is persisted — the only thing written to a database is anonymous job-skill telemetry (never your CV or results).
+A React single-page app talks to a stateless FastAPI backend over JSON. The backend is a set of **pure functions of the request body** — it calls out to Claude for the language-heavy steps, to a local deterministic matcher for skill scoring (no LLM), to Tectonic for PDF rendering, and to four job scrapers. No user data is persisted — the only thing written to a database is anonymous job-skill telemetry (never your CV or results).
 
 ```mermaid
 flowchart TB
@@ -58,7 +58,7 @@ flowchart TB
     SVC -- "Sonnet 4.5 — tailor · cover letter" --> ANTH
     SVC -- "markdown -> LaTeX -> PDF" --> TEC["Tectonic (external binary)"]
     SVC -- "skill match, ~1ms, no LLM" --> GAZ["Local gazetteer matcher"]
-    SVC -- "scrape live jobs" --> SCR["Scrapers: MyCareersFuture JSON · LinkedIn guest HTML · JobStreet (Patchright)"]
+    SVC -- "scrape live jobs" --> SCR["Scrapers: MyCareersFuture JSON · LinkedIn guest HTML · JobStreet (Patchright) · Careers@Gov"]
     SVC -- "optional cloud browser (prod)" --> BB["Browserbase"]
 
     SVC -- "response (ephemeral)" --> Client
@@ -77,7 +77,7 @@ Tailoring is a **LangGraph state machine** (`parse_jd → match → tailor → c
 
 Honesty is **code-enforced, not just prompted**: a deterministic **honesty linter** post-checks the output for fabrication — an invented role/project heading, a metric not in the CV, or an industry/compliance term the CV never used — and returns advisories the UI surfaces. Fabrication means inventing *history*; adding a JD skill to the Skills section (for ATS coverage) is the tailor's job and is allowed.
 
-**Two tailoring styles** trade editorial latitude while keeping the honesty rules identical: `faithful` (keep all, reorder/rephrase) · `aggressive` (restructure + cut low-relevance sections, hard 1 page). A **one-page budget estimator** (calibrated so ~55 rendered lines ≈ one page) drives a live "≈1 page ✓ / trim ~N lines" badge as you edit.
+**Two tailoring styles** trade editorial latitude while keeping the honesty rules identical: `faithful` (keep all, reorder/rephrase) · `aggressive` (restructure + cut low-relevance sections, hard 1 page). A **one-page budget estimator** (constants measured per LaTeX template by rendering real PDFs) drives a live "≈1 page ✓ / trim ~N lines" badge as you edit.
 
 **→ Deep dive:** the [LangGraph state machine](ARCHITECTURE.md#resume-tailoring-pipeline) and the [code-enforced honesty model](ARCHITECTURE.md#honesty-enforcement).
 
@@ -91,7 +91,7 @@ Tailoring is the one step that sends your CV to a third party (Claude). Before i
 
 ### 2. Live job search
 
-A natural-language query ("50 remote AI Engineer jobs on JobStreet this week") is parsed by Haiku into structured filters (keyword, location, recency, seniority, remote, count, platforms). The three platforms are then scraped **concurrently** — wall-clock ≈ the slowest platform, not the sum — with jobs streamed to the client (NDJSON) as they arrive.
+A natural-language query ("50 remote AI Engineer jobs on JobStreet this week") is parsed by Haiku into structured filters (keyword, location, recency, seniority, remote, count, platforms). The four platforms are then scraped **concurrently** — wall-clock ≈ the slowest platform, not the sum — with jobs streamed to the client (NDJSON) as they arrive.
 
 To stay fast and avoid tripping platform soft-walls, LinkedIn/JobStreet return **cards only**; full descriptions are fetched **on demand** when a job is opened, and every card's keywords are **backfilled in the background** after the first render. Each job is tagged with per-JD skill have/missing and a relevance score against the CV. Large searches (up to 300) spread a **weighted per-platform budget** so a fast source can't starve the slower ones, and an optional **learned fit predictor** re-ranks the combined results — surfaced as a relative **Strong / Moderate / Weak** tier plus a *top-fit* marker, not a misleading absolute score.
 
@@ -123,13 +123,13 @@ The gazetteer is the **single source of a JD's skills**: the tailor uses the *sa
 |-------|------|-----|
 | **Backend** | FastAPI + Uvicorn (async, request-id logging), per-IP rate limiting | Stateless JSON API |
 | **Agents** | LangGraph + LangChain + `langchain-anthropic` | Orchestrates `parse_jd → match → tailor → cover_letter` |
-| **LLM** | Anthropic **Claude Haiku 4.5** (JD parse, NL query, JD clean-up) + **Sonnet 4.5** (tailor, cover letter) | Cheap model for parsing, quality model for writing |
+| **LLM** | Anthropic **Claude Haiku 4.5** (JD parse, NL query, JD clean-up) + **Sonnet 4.5** (tailor, cover letter), behind a **provider-agnostic factory** (`src/llm.py`) | Cheap model for parsing, quality model for writing; swap provider by env var |
 | **Matching** | Local gazetteer matcher (`src/matching/`) | Deterministic skill scoring, no LLM, ~1 ms |
 | **Privacy** | Deterministic PII guardrail (`src/guardrails/`) | Strips name/email/phone/URL from the CV before it reaches Claude, restored locally; no deps, ~1 ms |
 | **Telemetry** | Supabase Postgres (`growth_candidates` table, PostgREST RPC over `httpx`) | Anonymous job-skill terms for taxonomy tuning — no user data; fire-and-forget, fail-open |
 | **Resume in** | `markitdown` | Uploaded resume PDF → markdown |
 | **Resume out** | Markdown → LaTeX → **Tectonic** (`-X compile`) | ATS-safe single-column PDF; never stored |
-| **Scrapers** | `httpx` + `beautifulsoup4` (LinkedIn guest, MyCareersFuture JSON), **Patchright** (JobStreet stealth browser) | Live multi-platform search |
+| **Scrapers** | `httpx` + `beautifulsoup4` (LinkedIn guest, MyCareersFuture JSON, Careers@Gov), **Patchright** (JobStreet stealth browser) | Live multi-platform search |
 | **Cloud browser** | **Browserbase** (optional) | Reliable LinkedIn/JobStreet fetch from datacenter IPs in prod |
 | **Observability** (optional) | **LangSmith** tracing + Hub prompts (off by default, PII-redacted) | Trace LLM calls + version prompts in a playground |
 | **Config / schemas** | Pydantic + `pydantic-settings` + `python-dotenv`; `tenacity` (retries); `rich` (CLI) | Typed settings & agent outputs |
@@ -159,6 +159,7 @@ No auth headers — all endpoints are open (CORS-limited to configured origins).
 | `POST` | `/resume/parse` | multipart PDF → markdown (returned, not stored) |
 | `POST` | `/search` | `{query, resume_markdown?}` → `{jobs[], interpreted}` |
 | `POST` | `/search/stream` | same input → NDJSON stream (progressive results) |
+| `POST` | `/tailor/stream` | same input as `/tailor` → NDJSON stream; the resume paints as it is written |
 | `POST` | `/jobs/enrich/stream` | `{jobs[], resume_markdown?}` → NDJSON stream backfilling card keywords |
 | `POST` | `/job/description` | `{platform, external_id, url, resume_markdown?}` → on-demand full JD + skill split |
 | `POST` | `/job/red-flags` | `{description, company, salary_*, url, posted_date}` → `{flags[]}` (deterministic, no LLM) |

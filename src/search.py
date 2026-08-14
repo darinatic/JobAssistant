@@ -18,7 +18,7 @@ from src.utils.config import settings
 
 log = logging.getLogger(__name__)
 
-DEFAULT_PLATFORMS = ["mycareersfuture", "linkedin", "jobstreet", "careersgov", "ats"]
+DEFAULT_PLATFORMS = ["mycareersfuture", "linkedin", "jobstreet", "careersgov"]
 # Reliability-tuned per-platform ceilings. LinkedIn raised to 50 (2026-08-01) now
 # that detail fetches go through Browserbase SG proxies + session rotation; the
 # guest card-search can still wall on very large bursts, so a big LinkedIn search
@@ -26,12 +26,10 @@ DEFAULT_PLATFORMS = ["mycareersfuture", "linkedin", "jobstreet", "careersgov", "
 # most reliable, so it goes highest.
 # Careers@Gov sits in the high-reliability tier with MCF: its whole catalogue
 # arrives in ONE request, so a bigger budget costs no extra fetches.
-_CAPS = {"mycareersfuture": 80, "linkedin": 50, "jobstreet": 50, "careersgov": 80,
-         "ats": 60}
+_CAPS = {"mycareersfuture": 80, "linkedin": 50, "jobstreet": 50, "careersgov": 80}
 # Relative share of a large search budget. The higher-volume boards (JobStreet,
 # LinkedIn, Careers@Gov) get more than MCF, per how many listings each carries.
-_WEIGHTS = {"jobstreet": 3, "linkedin": 3, "careersgov": 3, "mycareersfuture": 1,
-            "ats": 2}
+_WEIGHTS = {"jobstreet": 3, "linkedin": 3, "careersgov": 3, "mycareersfuture": 1}
 
 _SENTINEL = object()  # one per platform task signals "this platform is done"
 
@@ -371,9 +369,6 @@ async def fetch_job_detail(platform: str, external_id: str, url: str) -> JobDeta
         if platform == "careersgov":
             from src.scrapers.careersgov import CareersGovScraper
             return JobDetail(description=await CareersGovScraper.fetch_one(url))
-        if platform == "ats":
-            from src.scrapers.ats import AtsScraper
-            return JobDetail(description=await AtsScraper.fetch_one(url))
     except Exception as e:
         log.warning("On-demand detail fetch failed (%s): %s", platform, e)
     return JobDetail()

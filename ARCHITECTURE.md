@@ -18,7 +18,7 @@ The technical companion to the [README](README.md). The README is the overview �
 
 ## System overview
 
-A React SPA holds all state (CV + results) in `localStorage` and re-sends the CV in the body of every request. The FastAPI backend is a set of **pure functions of the request body** — no auth, no session, and no *user* data stored (the one exception is anonymous job-skill telemetry, below). It fans out to Claude for the language-heavy steps, a local deterministic matcher for scoring (no LLM), Tectonic for PDF, and three job scrapers.
+A React SPA holds all state (CV + results) in `localStorage` and re-sends the CV in the body of every request. The FastAPI backend is a set of **pure functions of the request body** — no auth, no session, and no *user* data stored (the one exception is anonymous job-skill telemetry, below). It fans out to Claude for the language-heavy steps, a local deterministic matcher for scoring (no LLM), Tectonic for PDF, and four job scrapers.
 
 ```mermaid
 flowchart TB
@@ -39,7 +39,7 @@ flowchart TB
     SVC -- "CV redacted first (name/email/phone/url stripped)" --> G
     G -- "anonymized text only" --> ANTH["Anthropic Claude<br/>Haiku 4.5 · Sonnet 4.5"]
     SVC -- "markdown → LaTeX → PDF" --> TEC["Tectonic (external binary)"]
-    SVC -- "scrape live jobs" --> SCR["MyCareersFuture JSON · LinkedIn guest HTML · JobStreet (Patchright)"]
+    SVC -- "scrape live jobs" --> SCR["MyCareersFuture JSON · LinkedIn guest HTML · JobStreet (Patchright) · Careers@Gov"]
     SCR -. "optional cloud browser (prod)" .-> BB["Browserbase"]
     SVC -- "response (ephemeral)" --> Client
 ```
@@ -174,7 +174,7 @@ Fabrication means inventing *history* (a made-up role, a metric the CV never sta
 
 ## Live job search
 
-A natural-language query is parsed into structured filters, then three platforms are scraped **concurrently** and streamed to the client as results arrive.
+A natural-language query is parsed into structured filters, then four platforms are scraped **concurrently** and streamed to the client as results arrive.
 
 ```mermaid
 sequenceDiagram
@@ -187,7 +187,7 @@ sequenceDiagram
 
     B->>API: POST /search/stream {query, filters?, resume_markdown?}
     API->>API: parse_search_query (Haiku) — or build_query (deterministic, if UI filters)
-    par three platforms run concurrently
+    par four platforms run concurrently
         API->>MCF: JSON /v2/jobs (full JD inline)
         MCF->>Q: cards
     and
