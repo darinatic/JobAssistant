@@ -106,3 +106,49 @@ def capabilities_for(platform: str) -> BoardCapabilities:
     if caps is None:
         raise ValueError(f"Unknown platform: {platform}")
     return caps
+
+
+# A filter set to any of these is "not requested" rather than "requested and dropped".
+_UNSET: tuple[object, ...] = (None, "", "any", [], (), {})
+
+
+def _is_set(value: object) -> bool:
+    return value not in _UNSET
+
+
+@dataclass(frozen=True)
+class FilterPlan:
+    """How one board handles one request's filters."""
+
+    pushed: dict[str, object]    # sent to the board itself
+    local: dict[str, object]     # the adapter applies these to its own payload
+    dropped: dict[str, str]      # filter key -> why this board cannot honour it
+
+
+_DEFAULT_REASON = "This board does not support that filter."
+
+
+def partition_filters(platform: str, requested: dict[str, object]) -> FilterPlan:
+    """Split a request's common filters into pushed / local / dropped for one board.
+
+    Filters left at their default are not "dropped" — nothing was asked for. Only a
+    genuinely requested filter that the board cannot honour lands in `dropped`, and
+    it always carries a reason so the UI can say why.
+    """
+    caps = capabilities_for(platform)
+    pushed: dict[str, object] = {}
+    local: dict[str, object] = {}
+    dropped: dict[str, str] = {}
+
+    for key, value in requested.items():
+        if key not in caps.common or not _is_set(value):
+            continue
+        support = caps.common[key]
+        if support is Support.NATIVE:
+            pushed[key] = value
+        elif support is Support.LOCAL:
+            local[key] = value
+        else:
+            dropped[key] = caps.notes.get(key, _DEFAULT_REASON)
+
+    return FilterPlan(pushed=pushed, local=local, dropped=dropped)

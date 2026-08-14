@@ -14,6 +14,7 @@ from src.scrapers.capabilities import (
     COMMON_FILTERS,
     Support,
     capabilities_for,
+    partition_filters,
 )
 from src.scrapers.linkedin import LinkedInGuestScraper
 
@@ -90,3 +91,54 @@ def test_linkedin_still_sends_the_date_filter_it_does_honour():
     params = SearchParams(keyword="data engineer", date_posted="past_week")
     q = LinkedInGuestScraper()._build_query(params)
     assert q["f_TPR"] == "r604800"
+
+
+# --- push-down partition -----------------------------------------------------
+
+def test_partition_sends_native_filters_to_the_board():
+    plan = partition_filters("jobstreet", {"remote_options": ["remote"], "min_salary": 5000})
+    assert plan.pushed == {"remote_options": ["remote"], "min_salary": 5000}
+    assert plan.local == {}
+    assert plan.dropped == {}
+
+
+def test_partition_routes_local_filters_to_the_adapter():
+    plan = partition_filters("careersgov", {"experience_levels": ["entry_level"]})
+    assert plan.local == {"experience_levels": ["entry_level"]}
+    assert plan.pushed == {}
+
+
+def test_partition_reports_dropped_filters_with_a_reason():
+    plan = partition_filters("careersgov", {"min_salary": 5000})
+    assert plan.pushed == {} and plan.local == {}
+    assert "min_salary" in plan.dropped
+    assert "no salary" in plan.dropped["min_salary"].lower()
+
+
+def test_partition_ignores_empty_and_none_filters():
+    """An unset filter is not 'dropped' — there was nothing to drop."""
+    plan = partition_filters("linkedin", {
+        "experience_levels": [], "remote_options": [], "min_salary": None, "date_posted": "any",
+    })
+    assert plan.pushed == {} and plan.local == {} and plan.dropped == {}
+
+
+def test_partition_treats_date_any_as_unset():
+    plan = partition_filters("linkedin", {"date_posted": "any"})
+    assert plan.dropped == {} and plan.pushed == {}
+
+
+def test_partition_splits_a_mixed_request_across_all_three_buckets():
+    plan = partition_filters("mycareersfuture", {
+        "experience_levels": ["entry_level"],  # native  (positionLevels)
+        "date_posted": "past_week",            # local   (no date param)
+        "remote_options": ["remote"],          # dropped (400s)
+    })
+    assert plan.pushed == {"experience_levels": ["entry_level"]}
+    assert plan.local == {"date_posted": "past_week"}
+    assert set(plan.dropped) == {"remote_options"}
+
+
+def test_partition_rejects_unknown_platform():
+    with pytest.raises(ValueError):
+        partition_filters("indeed", {"min_salary": 5000})

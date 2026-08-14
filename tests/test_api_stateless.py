@@ -76,9 +76,32 @@ def test_search_stream(client):
         r = client.post("/search/stream", json={"query": "AI jobs"})
     assert r.status_code == 200, r.text
     lines = [json.loads(x) for x in r.text.strip().split("\n")]
+    # Assert by TYPE, not position: the stream gained a filter_report line and will
+    # gain more. Clients dispatch on `type` and ignore what they don't know.
     assert lines[0]["type"] == "interpreted"
-    assert lines[1]["type"] == "job" and lines[1]["data"]["company"] == "X"
     assert lines[-1]["type"] == "done"
+    jobs = [x for x in lines if x["type"] == "job"]
+    assert [j["data"]["company"] for j in jobs] == ["X", "Y"]
+
+
+def test_search_stream_reports_dropped_filters_before_any_job(client):
+    """A dropped filter must be knowable before the scrape finishes — otherwise it
+    looks identical to "no jobs matched"."""
+    from src.search_nlp import SearchQuery
+
+    async def fake_stream(**kw):
+        yield {"platform": "linkedin", "title": "AI Engineer", "company": "Y", "external_id": "2"}
+
+    # LinkedIn cannot filter by salary (f_SB2 measured ignored).
+    q = SearchQuery(keyword="AI", platforms=["linkedin"], min_salary=5000)
+    with patch("src.search_nlp.parse_search_query", new=AsyncMock(return_value=q)), \
+         patch("src.api.job_search.search_jobs_stream", new=fake_stream):
+        r = client.post("/search/stream", json={"query": "AI jobs paying 5k"})
+    lines = [json.loads(x) for x in r.text.strip().split("\n")]
+    types = [x["type"] for x in lines]
+    assert types.index("filter_report") < types.index("job")
+    report = next(x for x in lines if x["type"] == "filter_report")["data"]
+    assert "min_salary" in report["linkedin"]["dropped"]
 
 
 def test_tailor(client):

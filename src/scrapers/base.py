@@ -17,6 +17,9 @@ class SearchParams:
     experience_levels: list[str] = field(default_factory=list)
     # on_site | remote | hybrid
     remote_options: list[str] = field(default_factory=list)
+    # Monthly minimum in SGD. Native on MCF (`salary=`) and JobStreet
+    # (`salarytype=monthly&salaryrange=N-`); unsupported elsewhere.
+    min_salary: int | None = None
     max_jobs: int = 25
     # When False, scrapers that need a separate detail fetch (LinkedIn, JobStreet)
     # return cards WITHOUT descriptions — the client fetches them on demand when a

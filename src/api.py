@@ -98,6 +98,10 @@ class SearchRequest(BaseModel):
 class SearchResponse(BaseModel):
     jobs: list[dict]
     interpreted: dict  # the filters the NL query was parsed into
+    filter_report: dict[str, dict] = Field(
+        default_factory=dict,
+        description="Per-platform: which requested filters were applied, and which were dropped with why",
+    )
 
 
 class ScoreRequest(BaseModel):
@@ -313,6 +317,19 @@ async def resume_parse(file: UploadFile = File(...)) -> ResumeParseResponse:
     return ResumeParseResponse(doc=doc, chars=len(text))
 
 
+def _filter_report_for(q) -> dict[str, dict]:
+    """Which of this query's filters each targeted board honoured, and which it dropped."""
+    return job_search.build_filter_report(
+        q.platforms or job_search.DEFAULT_PLATFORMS,
+        {
+            "date_posted": q.date_posted,
+            "experience_levels": q.experience_levels,
+            "remote_options": q.remote_options,
+            "min_salary": q.min_salary,
+        },
+    )
+
+
 @app.post("/search", response_model=SearchResponse)
 async def search(req: SearchRequest) -> SearchResponse:
     """Natural-language multi-platform job scrape. The query is parsed into filters
@@ -328,9 +345,12 @@ async def search(req: SearchRequest) -> SearchResponse:
         date_posted=q.date_posted,
         experience_levels=q.experience_levels,
         remote_options=q.remote_options,
+        min_salary=q.min_salary,
         master_cv=req.resume_markdown,
     )
-    return SearchResponse(jobs=jobs, interpreted=q.model_dump())
+    return SearchResponse(
+        jobs=jobs, interpreted=q.model_dump(), filter_report=_filter_report_for(q),
+    )
 
 
 @app.post("/search/stream")
@@ -347,6 +367,9 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
 
     async def gen():
         yield json.dumps({"type": "interpreted", "data": q.model_dump()}) + "\n"
+        # Emitted before any job so the client can warn about a dropped filter
+        # immediately, rather than after a full scrape that looks like "no matches".
+        yield json.dumps({"type": "filter_report", "data": _filter_report_for(q)}) + "\n"
         floor = False
         if match_predictor.is_enabled() and req.resume_markdown:
             # Predictor on: score every job and surface only good-fit ones.
@@ -354,6 +377,7 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
                 keyword=q.keyword, location=q.location, platforms=q.platforms or None,
                 max_jobs=q.max_jobs, date_posted=q.date_posted,
                 experience_levels=q.experience_levels, remote_options=q.remote_options,
+                min_salary=q.min_salary,
                 master_cv=req.resume_markdown, gate=req.strong_fits_only,
             ):
                 if msg.get("type") == "job" and msg["data"].get("below_threshold"):
@@ -365,6 +389,7 @@ async def search_stream(req: SearchRequest) -> StreamingResponse:
                 keyword=q.keyword, location=q.location, platforms=q.platforms or None,
                 max_jobs=q.max_jobs, date_posted=q.date_posted,
                 experience_levels=q.experience_levels, remote_options=q.remote_options,
+                min_salary=q.min_salary,
                 master_cv=req.resume_markdown,
             ):
                 yield json.dumps({"type": "job", "data": job}) + "\n"

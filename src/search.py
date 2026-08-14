@@ -14,6 +14,7 @@ from dataclasses import asdict
 from src.matching import extract_skills
 from src.scrapers import SearchParams, build_scraper
 from src.scrapers.base import DiscoveredJob, JobDetail
+from src.scrapers.capabilities import FilterPlan, partition_filters
 from src.utils.config import settings
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,46 @@ def _platform_budgets(targets: list[str], max_jobs: int) -> dict[str, int]:
         p: max(1, min(round(max_jobs * weights[p] / total_w), _CAPS.get(p, max_jobs)))
         for p in targets
     }
+
+
+def _plan_for(platform: str, requested: dict[str, object]) -> FilterPlan:
+    """Filter plan for a board, failing OPEN when it has no capability descriptor.
+
+    `build_scraper` succeeding while `capabilities_for` fails means a scrapeable
+    board nobody has described yet (a new adapter, or a test's fake). Sending every
+    filter is the pre-capability behaviour and the safe default: the alternative,
+    treating an undescribed board as supporting nothing, would silently stop
+    filtering the results it returns.
+    """
+    try:
+        return partition_filters(platform, requested)
+    except ValueError:
+        log.warning(
+            "No capability descriptor for %s — forwarding all filters unfiltered.", platform
+        )
+        return FilterPlan(pushed=dict(requested), local={}, dropped={})
+
+
+def build_filter_report(
+    targets: list[str], requested: dict[str, object]
+) -> dict[str, dict]:
+    """Per-platform record of which requested filters were honoured and which were not.
+
+    Returned to the client so a filter can never be silently ignored again — the
+    old behaviour (LinkedIn dropping f_E, everyone dropping remote_options) looked
+    identical to "no jobs matched".
+    """
+    report: dict[str, dict] = {}
+    for platform in targets:
+        try:
+            plan = partition_filters(platform, requested)
+        except ValueError:
+            continue
+        report[platform] = {
+            "applied": sorted([*plan.pushed, *plan.local]),
+            "dropped": plan.dropped,
+        }
+    return report
 
 
 def _skill_split(title: str, description: str, cv_skills: set[str] | None) -> dict:
@@ -106,35 +147,61 @@ async def _scrape(
     cv_skills: set[str] | None,
     fetch_descriptions: bool,
     master_cv: str | None = None,
+    min_salary: int | None = None,
 ) -> AsyncIterator[dict]:
     """Yield enriched job dicts, scraping all platforms **concurrently**.
 
     Each platform runs in its own task feeding a shared queue; results are
     yielded as they arrive (fast MCF jobs no longer wait behind the slow
     browser-based scrapers). Wall-clock ≈ the slowest platform, not the sum.
+
+    Each board is sent only the filters it can actually honour (see
+    scrapers/capabilities.py); the rest are applied locally by the adapter or
+    reported as dropped. Nothing is silently discarded.
     """
     targets = platforms or DEFAULT_PLATFORMS
     budgets = _platform_budgets(targets, max_jobs)
+    requested: dict[str, object] = {
+        "date_posted": date_posted,
+        "experience_levels": experience_levels or [],
+        "remote_options": remote_options or [],
+        "min_salary": min_salary,
+    }
     queue: asyncio.Queue = asyncio.Queue()
 
     async def run(platform: str) -> None:
+        # EVERYTHING below is inside this try/finally: the consumer drains until it
+        # has seen one sentinel per task, so a task that dies before queueing its
+        # own would hang the whole search rather than degrade it.
         try:
-            scraper = build_scraper(platform)
-        except ValueError as e:
-            log.warning("Skipping unknown platform: %s", e)
-            await queue.put(_SENTINEL)
-            return
+            try:
+                scraper = build_scraper(platform)
+            except ValueError as e:
+                log.warning("Skipping unknown platform: %s", e)
+                return
 
-        params = SearchParams(
-            keyword=keyword,
-            location=location,
-            max_jobs=budgets.get(platform, max_jobs),
-            date_posted=date_posted,
-            experience_levels=experience_levels or [],
-            remote_options=remote_options or [],
-            fetch_descriptions=fetch_descriptions,
-        )
-        try:
+            plan = _plan_for(platform, requested)
+            params = SearchParams(
+                keyword=keyword,
+                location=location,
+                max_jobs=budgets.get(platform, max_jobs),
+                # Pushed filters go to the board; local ones the adapter applies to
+                # its own payload. Either way the adapter receives the value; a
+                # DROPPED filter simply never reaches it.
+                date_posted=str(
+                    plan.pushed.get("date_posted") or plan.local.get("date_posted") or "any"
+                ),
+                experience_levels=list(
+                    plan.pushed.get("experience_levels")
+                    or plan.local.get("experience_levels")
+                    or []
+                ),
+                remote_options=list(
+                    plan.pushed.get("remote_options") or plan.local.get("remote_options") or []
+                ),
+                min_salary=plan.pushed.get("min_salary") or plan.local.get("min_salary"),
+                fetch_descriptions=fetch_descriptions,
+            )
             async for job in scraper.search(params):
                 item = _enrich(job, cv_skills)
                 fit = await _fit_pct(master_cv, job.title, job.description or "")
@@ -177,6 +244,7 @@ async def search_jobs(
     remote_options: list[str] | None = None,
     master_cv: str | None = None,
     fetch_descriptions: bool = False,
+    min_salary: int | None = None,
 ) -> list[dict]:
     """Collect all jobs, then (with a CV) sort by relevance. Deterministic — no LLM."""
     cv_skills = extract_skills(master_cv) if master_cv else None
@@ -184,6 +252,7 @@ async def search_jobs(
         job async for job in _scrape(
             keyword, location, platforms, max_jobs, date_posted,
             experience_levels, remote_options, cv_skills, fetch_descriptions, master_cv,
+            min_salary,
         )
     ]
     if cv_skills is not None:
@@ -202,12 +271,14 @@ async def search_jobs_stream(
     remote_options: list[str] | None = None,
     master_cv: str | None = None,
     fetch_descriptions: bool = False,
+    min_salary: int | None = None,
 ) -> AsyncIterator[dict]:
     """Progressive variant — yields each job as it's scraped across all platforms."""
     cv_skills = extract_skills(master_cv) if master_cv else None
     async for job in _scrape(
         keyword, location, platforms, max_jobs, date_posted,
         experience_levels, remote_options, cv_skills, fetch_descriptions, master_cv,
+        min_salary,
     ):
         yield job
 
@@ -222,6 +293,7 @@ async def search_jobs_gated_stream(
     remote_options: list[str] | None = None,
     master_cv: str | None = None,
     gate: bool = True,
+    min_salary: int | None = None,
 ) -> AsyncIterator[dict]:
     """Predictor-scored search: fetch + score each scraped job's JD (MCF inline,
     others via the bounded Browserbase pool). Yields ``{"type":"progress",...}`` and
@@ -258,7 +330,7 @@ async def search_jobs_gated_stream(
             async for job in _scrape(
                 keyword, location, platforms, cap, date_posted,
                 experience_levels, remote_options, cv_skills,
-                fetch_descriptions=False, master_cv=None,
+                fetch_descriptions=False, master_cv=None, min_salary=min_salary,
             ):
                 await card_q.put(job)
         finally:

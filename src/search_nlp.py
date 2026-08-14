@@ -34,6 +34,9 @@ class SearchQuery(BaseModel):
     remote_options: list[str] = Field(
         default_factory=list, description="Any of: on_site, remote, hybrid",
     )
+    min_salary: int | None = Field(
+        default=None, description="Minimum MONTHLY salary in SGD, e.g. 5000",
+    )
     max_jobs: int = Field(default=25, description="How many jobs to return (1-100)")
     platforms: list[str] = Field(
         default_factory=list,
@@ -64,6 +67,17 @@ class SearchQuery(BaseModel):
         if not isinstance(v, list):
             return []
         return [str(x).strip().lower() for x in v]
+
+    @field_validator("min_salary", mode="before")
+    @classmethod
+    def _clean_salary(cls, v):
+        if v in (None, "", 0):
+            return None
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return None
+        return n if 0 < n <= 100_000 else None
 
     @field_validator("max_jobs", mode="before")
     @classmethod
@@ -104,7 +118,8 @@ _SYSTEM = (
     "the user actually specifies; leave the rest at their defaults. `keyword` is the role "
     "or skills to search for. Recognise counts ('find 50 jobs' -> max_jobs=50), platform "
     "names ('only on JobStreet' -> platforms=['jobstreet']), recency ('this week' -> "
-    "date_posted='past_week'), remote/hybrid/onsite, and seniority."
+    "date_posted='past_week'), remote/hybrid/onsite, seniority, and a monthly salary "
+    "floor ('at least 5k' -> min_salary=5000)."
 )
 
 _llm = None
