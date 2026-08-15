@@ -77,8 +77,26 @@ body {
   --font-display: 'Space Grotesk Variable', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
-  /* match-state colors */
-  --have: oklch(0.44 0.11 155);
+  /* match-state colors.
+
+     --have is BLUE, not green, on purpose. It is read against two partners:
+     --gap (amber) and --honesty (rose). Green/amber and green/rose both separate
+     almost entirely along the red-green hue axis, which is the axis deuteranomaly
+     and protanomaly compress — the two most common forms of colour blindness. Blue
+     against amber, and blue against rose, both sit on the blue-yellow axis instead,
+     which those forms retain.
+
+     Measured (Vienot 1999 simulation, RGB distance x100):
+                            normal  deuter  protan
+       green vs amber (old)   36.0    15.5     4.8   <- effectively one colour
+       blue  vs amber (new)   49.7    40.9    35.9
+       green vs rose  (old)   44.4    20.0     4.3   <- effectively one colour
+       blue  vs rose  (new)   54.0    43.5    33.4
+
+     These hues do NOT separate in greyscale (measured dL ~1.6% either way), so
+     colour must never be the only cue. That is what the hatched gap bars in
+     ReadoutRail are for. */
+  --have: oklch(0.42 0.16 250);
   --gap: oklch(0.52 0.14 60);
   --honesty: oklch(0.50 0.17 25);
   --loc: var(--geo);
