@@ -62,6 +62,47 @@ export function toRequestFilters(f: FilterState, keyword: string, location: stri
     platforms: f.platforms,
     max_jobs: f.maxJobs,
     min_salary: f.minSalary,
-    platform_filters: f.platformFilters,
+    platform_filters: activeBoardFilters(f),
+  }
+}
+
+/** The board-native filters that are actually on screen, and therefore the only
+ *  ones it is honest to send.
+ *
+ *  Derived from the selection rather than read straight out of state: board panels
+ *  only render for a single selected board, so returning the whole stored map made
+ *  it possible to narrow results by a filter with no visible control anywhere. That
+ *  is the same silent-filter failure the capability layer exists to prevent, so the
+ *  payload is computed to make it unrepresentable rather than carefully managed.
+ *
+ *  Stored-but-inactive entries are kept in state on purpose: reselecting a board
+ *  restores what you last chose for it, and it becomes visible again at the same
+ *  moment it becomes active. */
+export function activeBoardFilters(f: FilterState): Record<string, Record<string, unknown>> {
+  if (f.platforms.length !== 1) return {}
+  const board = f.platforms[0]
+  const own = f.platformFilters[board]
+  if (!own || Object.keys(own).length === 0) return {}
+  return { [board]: own }
+}
+
+/** Restore saved filter state, normalised to what the current UI can represent.
+ *
+ *  `platforms` used to be a multi-select, so a returning visitor's localStorage can
+ *  hold several boards. The board control is single-choice now, and rendering it
+ *  would highlight only the first while the search still hit all of them: a hidden
+ *  board with no control on screen. Clamp to the first, and drop native filters that
+ *  no longer belong to the selected board. */
+export function restoreFilters(saved: Partial<FilterState> | undefined): FilterState {
+  const merged: FilterState = { ...DEFAULT_FILTERS, ...(saved ?? {}) }
+  const platforms = Array.isArray(merged.platforms) ? merged.platforms.slice(0, 1) : []
+  const board = platforms[0]
+  return {
+    ...merged,
+    platforms,
+    platformFilters:
+      board && merged.platformFilters?.[board]
+        ? { [board]: merged.platformFilters[board] }
+        : {},
   }
 }

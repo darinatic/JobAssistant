@@ -30,9 +30,10 @@ export function FilterBtn({ active, onClick, children, disabled, title }: {
   )
 }
 
-export function FilterRows({ filters, setDate, setMax, toggleFilter, caps, setMinSalary, setPlatformFilters }: {
+export function FilterRows({ filters, setDate, setMax, toggleFilter, selectBoard, caps, setMinSalary, setPlatformFilters }: {
   filters: FilterState; setDate: (v: string) => void; setMax: (n: number) => void
-  toggleFilter: (k: 'experienceLevels' | 'remoteOptions' | 'platforms', v: string) => void
+  toggleFilter: (k: 'experienceLevels' | 'remoteOptions', v: string) => void
+  selectBoard: (platform: string | null) => void
   caps: Capabilities | null
   setMinSalary: (n: number | null) => void
   setPlatformFilters: (platform: string, next: Record<string, unknown>) => void
@@ -56,8 +57,17 @@ export function FilterRows({ filters, setDate, setMax, toggleFilter, caps, setMi
       <FilterRow label="max jobs">
         {MAX_JOBS_OPTIONS.map((n) => <FilterBtn key={n} active={filters.maxJobs === n} onClick={() => setMax(n)}>{n}</FilterBtn>)}
       </FilterRow>
-      <FilterRow label="boards" note="none = every board">
-        {PLATFORM_OPTIONS.map((o) => <FilterBtn key={o.value} active={filters.platforms.includes(o.value)} onClick={() => toggleFilter('platforms', o.value)}>{o.label}</FilterBtn>)}
+      <FilterRow label="board" note={filters.platforms.length === 1 ? 'gets the whole budget' : 'budget splits across all four'}>
+        {/* Single choice, not a multi-select. Board-native filters below only exist
+            for one board at a time, so an arbitrary subset has no coherent panel to
+            show and used to leave a hidden filter applied. */}
+        <FilterBtn active={filters.platforms.length === 0} onClick={() => selectBoard(null)}>
+          All boards
+        </FilterBtn>
+        {PLATFORM_OPTIONS.map((o) => (
+          <FilterBtn key={o.value} active={filters.platforms[0] === o.value}
+            onClick={() => selectBoard(o.value)}>{o.label}</FilterBtn>
+        ))}
       </FilterRow>
       <FilterRow label="experience" note={exp.usable ? undefined : unavailable}>
         {EXPERIENCE_OPTIONS.map((o) => (

@@ -17,7 +17,7 @@ import { type ResumeDoc, blankDoc, deserialize, hasContent, serialize, upgradeDo
 import { estimatePageTarget } from '@/lib/page-fit'
 import { patchSkillsLine } from '@/lib/skills'
 import { EMPTY_REFINE, type RefineState } from '@/lib/jobfmt'
-import { DEFAULT_FILTERS, toRequestFilters, type FilterState } from '@/lib/search-filters'
+import { restoreFilters, toRequestFilters, type FilterState } from '@/lib/search-filters'
 import { droppedSummary, type Capabilities, type FilterReport } from '@/lib/capabilities'
 
 const CV_KEY = 'overlap.cv'    // legacy: migrated once into DOC_KEY, then retired
@@ -72,7 +72,7 @@ function Home() {
   const [jobs, setJobs] = useState<Job[]>(saved.jobs ?? [])
   // Merge, don't substitute: a localStorage object saved before minSalary and
   // platformFilters existed would otherwise restore them as undefined.
-  const [filters, setFilters] = useState<FilterState>({ ...DEFAULT_FILTERS, ...(saved.filters ?? {}) })
+  const [filters, setFilters] = useState<FilterState>(restoreFilters(saved.filters))
   const [caps, setCaps] = useState<Capabilities | null>(null)
   const [filterReport, setFilterReport] = useState<FilterReport | null>(null)
   const [searching, setSearching] = useState(false)
@@ -199,7 +199,13 @@ function Home() {
     } catch (e) { toast.error(err(e)); return false } finally { setUploading(false) }
   }
 
-  function toggleFilter(key: 'experienceLevels' | 'remoteOptions' | 'platforms', value: string) {
+  // Boards are a single choice: null = all four. Native filters below only exist
+  // for one board at a time, so there is no coherent panel for an arbitrary subset.
+  function selectBoard(platform: string | null) {
+    setFilters((f) => ({ ...f, platforms: platform ? [platform] : [] }))
+  }
+
+  function toggleFilter(key: 'experienceLevels' | 'remoteOptions', value: string) {
     setFilters((f) => {
       const has = f[key].includes(value)
       return { ...f, [key]: has ? f[key].filter((v) => v !== value) : [...f[key], value] }
@@ -479,7 +485,7 @@ function Home() {
                     </div>
                   )}
 
-                  <FilterRows filters={filters} setDate={setDate} setMax={setMax} toggleFilter={toggleFilter}
+                  <FilterRows filters={filters} setDate={setDate} setMax={setMax} toggleFilter={toggleFilter} selectBoard={selectBoard}
                     caps={caps} setMinSalary={setMinSalary} setPlatformFilters={setPlatformFilters} />
 
                   {/* scoring progress after search */}
