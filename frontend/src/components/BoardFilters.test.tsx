@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { BoardFilters } from './BoardFilters'
+import { BoardFilters, SEARCHABLE_ABOVE } from './BoardFilters'
 import type { Capabilities } from '@/lib/capabilities'
 
 const CAPS: Capabilities = {
@@ -10,6 +10,17 @@ const CAPS: Capabilities = {
     careersgov_departments: ['Engineering'],
     careersgov_employment_types: ['Permanent'],
   },
+}
+
+// A vocabulary long enough to cross the threshold, like the real 96 agencies.
+const MANY: Capabilities = {
+  boards: {},
+  vocabularies: {
+    careersgov_agencies: Array.from({ length: 40 }, (_, i) => `Agency ${i}`),
+    careersgov_departments: ['Engineering'],
+    careersgov_employment_types: ['Permanent'],
+  },
+  aliases: { careersgov_agencies: { a7: 'Agency 7' } },
 }
 
 describe('BoardFilters', () => {
@@ -48,6 +59,28 @@ describe('BoardFilters', () => {
     )
     screen.getByText('Government Technology Agency').click()
     expect(onChange).toHaveBeenCalledWith({ agencies: [] })
+  })
+
+  it('renders a short vocabulary as chips, not a dropdown', () => {
+    // For a handful of options, chips beat a dropdown: everything is visible at a
+    // glance and selecting is one click.
+    render(<BoardFilters caps={CAPS} platform="careersgov" value={{}} onChange={vi.fn()} />)
+    expect(screen.getByText('Government Technology Agency')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /all 2/ })).toBeNull()
+  })
+
+  it('renders a long vocabulary as a searchable control', () => {
+    render(<BoardFilters caps={MANY} platform="careersgov" value={{}} onChange={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /all 40/ })).toBeInTheDocument()
+    // The 40 options are behind the control, not painted as a wall of chips.
+    expect(screen.queryByText('Agency 7')).toBeNull()
+  })
+
+  it('puts the threshold where the real vocabularies fall either side of it', () => {
+    // work type 4, employment type 6-8 -> chips; category 32, department 36,
+    // agency 96 -> searchable.
+    expect(SEARCHABLE_ABOVE).toBeGreaterThanOrEqual(8)
+    expect(SEARCHABLE_ABOVE).toBeLessThan(32)
   })
 
   it('skips a row whose vocabulary is empty', () => {

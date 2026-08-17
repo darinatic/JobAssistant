@@ -16,6 +16,10 @@ export type BoardCaps = {
 export type Capabilities = {
   boards: Record<string, BoardCaps>
   vocabularies: Record<string, string[]>
+  // Short name -> full legal name, e.g. { htx: "Home Team Science and Technology
+  // Agency (HTX)" }. Lets the UI search a vocabulary by acronym; the boards list
+  // only full legal names, so "govtech" would otherwise match nothing.
+  aliases?: Record<string, Record<string, string>>
 }
 
 /** Per-platform record of which requested filters a board honoured. */
