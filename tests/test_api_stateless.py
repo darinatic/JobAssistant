@@ -287,3 +287,24 @@ def test_capabilities_publish_vocabularies(client):
     vocabs = client.get("/search/capabilities").json()["vocabularies"]
     assert "Government Technology Agency" in vocabs["careersgov_agencies"]
     assert "Information Technology" in vocabs["mcf_categories"]
+
+
+def test_capabilities_publish_agency_aliases(client):
+    """Without these a UI search for "govtech" against a list of full legal names
+    finds nothing — the board only ever lists "Government Technology Agency"."""
+    aliases = client.get("/search/capabilities").json()["aliases"]["careersgov_agencies"]
+    assert aliases["govtech"] == "Government Technology Agency"
+    # The board suffixes this one; the alias must carry the suffix or the agency
+    # filter matches nothing (it compares by equality).
+    assert aliases["htx"] == "Home Team Science and Technology Agency (HTX)"
+    assert aliases["spf"] == "MHA - Singapore Police Force (SPF)"
+
+
+def test_agency_aliases_point_at_real_agencies(client):
+    """An alias mapping to a name absent from the vocabulary would silently
+    never match anything in the UI."""
+    body = client.get("/search/capabilities").json()
+    agencies = set(body["vocabularies"]["careersgov_agencies"])
+    aliases = body["aliases"]["careersgov_agencies"]
+    unknown = {k: v for k, v in aliases.items() if v not in agencies}
+    assert not unknown, f"aliases point at agencies not in the vocabulary: {unknown}"

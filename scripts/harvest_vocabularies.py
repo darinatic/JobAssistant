@@ -38,9 +38,16 @@ MCF_POSITION_LEVELS = (
 )
 # Acronyms candidates type; the board lists only full legal names. Lives here rather
 # than in careersgov.py so filters.py can use it without an import cycle.
+#
+# Values must match a CAREERSGOV_AGENCIES entry EXACTLY. The agency filter compares
+# by equality, so a near-miss returns zero jobs silently rather than erroring:
+# "htx", "spf" and "scdf" did exactly that until 2026-08-17, because the board
+# suffixes its Home Team agencies ("... (HTX)") and prefixes MHA ones ("MHA - ...").
+# tests/test_api_stateless.py asserts every value here exists in the vocabulary, so
+# a board rename fails the suite instead of quietly emptying a filter.
 AGENCY_ALIASES = {
     "govtech": "Government Technology Agency",
-    "htx": "Home Team Science and Technology Agency",
+    "htx": "Home Team Science and Technology Agency (HTX)",
     "dsta": "Defence Science and Technology Agency",
     "csit": "Centre for Strategic Infocomm Technologies",
     "imda": "Info-communications Media Development Authority",
@@ -55,11 +62,18 @@ AGENCY_ALIASES = {
     "moe": "Ministry of Education",
     "mom": "Ministry of Manpower",
     "mindef": "MINDEF",
-    "scdf": "Singapore Civil Defence Force",
-    "spf": "Singapore Police Force",
     "hsa": "Health Sciences Authority",
     "nrf": "National Research Foundation",
     "pub": "PUB, The National Water Agency",
+    # Home Team. Note "MHA- Central Narcotics Bureau" is missing the space after
+    # "MHA" in the board's own data; matched verbatim on purpose.
+    "scdf": "MHA - Singapore Civil Defence Force (SCDF)",
+    "spf": "MHA - Singapore Police Force (SPF)",
+    "cnb": "MHA- Central Narcotics Bureau (CNB)",
+    "sps": "MHA - Singapore Prison Service (SPS)",
+    "ica": "MHA - Immigration & Checkpoints Authority (ICA)",
+    "isd": "MHA - Internal Security Department (ISD)",
+    "hta": "MHA - Home Team Academy (HTA)",
 }
 
 

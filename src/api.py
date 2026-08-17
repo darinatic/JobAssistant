@@ -349,6 +349,12 @@ async def search_capabilities() -> dict:
             "careersgov_departments": list(vocab.CAREERSGOV_DEPARTMENTS),
             "careersgov_employment_types": list(vocab.CAREERSGOV_EMPLOYMENT_TYPES),
         },
+        # Short name -> full legal name. The board lists agencies only by their full
+        # legal name, so a UI search for "govtech" or "htx" finds nothing without
+        # these. Same table the Careers@Gov adapter uses to expand keyword queries.
+        "aliases": {
+            "careersgov_agencies": dict(vocab.CAREERSGOV_AGENCY_ALIASES),
+        },
     }
 
 

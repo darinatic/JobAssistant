@@ -193,7 +193,9 @@ def test_filters_for_returns_none_when_a_board_has_no_extras_requested():
 def test_filters_for_builds_the_right_model():
     f = filters_for("careersgov", {"agencies": ["htx"]})
     assert isinstance(f, CareersGovFilters)
-    assert f.agencies == ["Home Team Science and Technology Agency"]
+    # Must carry the board's "(HTX)" suffix. _matches_native compares by equality,
+    # so the un-suffixed name matched zero postings (fixed 2026-08-17).
+    assert f.agencies == ["Home Team Science and Technology Agency (HTX)"]
 
 
 def test_filters_for_rejects_unknown_platform():
