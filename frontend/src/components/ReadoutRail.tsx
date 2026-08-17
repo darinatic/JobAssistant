@@ -3,7 +3,9 @@ import type { Insights } from '@/lib/api'
 
 // ---- readout rail ----------------------------------------------------------
 
-export const TOP_SKILLS = 10
+// /insights aggregates exactly top_n=20 (src/insights.py), so this consumes the
+// whole payload. Asking for more would silently show fewer.
+export const TOP_SKILLS = 20
 
 /** Bar fill for a demanded skill.
  *

@@ -17,14 +17,19 @@ function insightsWith(n: number): Insights {
 const noop = () => 'var(--ink)'
 
 describe('ReadoutRail', () => {
-  it('shows the top 10 demanded skills', () => {
-    render(<ReadoutRail insights={insightsWith(20)} analyzing={false} scoreColor={noop} />)
-    expect(TOP_SKILLS).toBe(10)
-    expect(screen.getByText('skill-9')).toBeInTheDocument()
-    expect(screen.queryByText('skill-10')).toBeNull()
+  it('shows the top 20 demanded skills', () => {
+    render(<ReadoutRail insights={insightsWith(25)} analyzing={false} scoreColor={noop} />)
+    expect(TOP_SKILLS).toBe(20)
+    expect(screen.getByText('skill-19')).toBeInTheDocument()
+    expect(screen.queryByText('skill-20')).toBeNull()
   })
 
-  it('shows every skill when fewer than ten are demanded', () => {
+  it('matches what /insights actually returns', () => {
+    // src/insights.py aggregates top_n=20. Asking for more shows fewer, silently.
+    expect(TOP_SKILLS).toBeLessThanOrEqual(20)
+  })
+
+  it('shows every skill when fewer than the cap are demanded', () => {
     render(<ReadoutRail insights={insightsWith(4)} analyzing={false} scoreColor={noop} />)
     expect(screen.getByText('skill-3')).toBeInTheDocument()
   })
